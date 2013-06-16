@@ -28,8 +28,8 @@ object UuidTests {
 
     val uuidOneToMany = oneToManyRelation(uuidAsId, uuidAsForeignKey).via(_.id === _.foreignUuid)
 
-    override def drop = {
-      Session.cleanupResources
+    override def drop(implicit cs: Session) = {
+      cs.cleanup
       super.drop
     }
   }
@@ -41,7 +41,7 @@ abstract class UuidTests extends SchemaTester with RunTestsInsideTransaction{
 
   final def schema = TestSchema
 
-  test("UuidAsProperty") {
+  test("UuidAsProperty") { implicit session =>
     import TestSchema._
 
     val testObject = new UuidAsProperty
@@ -52,7 +52,7 @@ abstract class UuidTests extends SchemaTester with RunTestsInsideTransaction{
     testObject.uuid should equal(uuidAsProperty.where(_.uuid in List(testObject.uuid)).single.uuid)
   }
 
-  test("UuidAsId") {
+  test("UuidAsId") { implicit session =>
     import TestSchema._
 
     val testObject = new UuidAsId
@@ -67,7 +67,7 @@ abstract class UuidTests extends SchemaTester with RunTestsInsideTransaction{
     lookup.get.id should equal(testObject.id)
   }
 
-  test("UuidAsForeignKey") {
+  test("UuidAsForeignKey") { implicit session =>
     import TestSchema._
 
     val primaryObject = new UuidAsId

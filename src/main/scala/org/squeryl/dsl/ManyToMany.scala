@@ -15,7 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.dsl
 
-import org.squeryl.{ForeignKeyDeclaration, Table, Query, KeyedEntity}
+import org.squeryl.{ForeignKeyDeclaration, Table, Query, KeyedEntity, Session}
 import collection.mutable.{HashMap, ArrayBuffer, Buffer}
 import org.squeryl.KeyedEntityDef
 
@@ -41,51 +41,64 @@ trait OneToManyRelation[O,M] extends Relation[O,M] {
 
 class StatefulOneToMany[M](val relation: OneToMany[M]) extends Iterable[M] {
 
+  private var _refreshed = false
   private val _buffer = new ArrayBuffer[M]
 
-  refresh
-  
-  def refresh = {
+  def refresh(implicit cs: Session) = {
     _buffer.clear
     for(m <- relation.iterator.toSeq)
       _buffer.append(m)
+    _refreshed = true
+    this
   }
 
-  def iterator = _buffer.iterator
+  def iterator = {
+    require(_refreshed, "iterator called before relationship was refreshed")
+    _buffer.iterator
+  }
 
-  def associate(m: M) = {
+  def associate(m: M)(implicit cs: Session) = {
+    if (!_refreshed) refresh
     relation.associate(m)
     _buffer.append(m)
     m
   }
 
-  def deleteAll: Int = {
+  def deleteAll(implicit cs: Session): Int = {
     val r = relation.deleteAll
     _buffer.clear
+    _refreshed = true
     r
   }
 }
 
 class StatefulManyToOne[O](val relation: ManyToOne[O]) {
 
+  private var _refreshed = false
   private var _one: Option[O] = None
 
-  refresh
-
-  def refresh = 
+  def refresh(implicit cs: Session) = {
     _one = relation.iterator.toSeq.headOption
+    _refreshed = true
+    this
+  }
 
-  def one = _one
+  def one = {
+    require(_refreshed, "one called before relationship was refreshed")
+    _one
+  }
 
-  def assign(o: O) = {
+  def assign(o: O)(implicit cs: Session) = {
     relation.assign(o)
     _one = Some(o)
+    _refreshed = true
     o
   }
 
-  def delete = {
+  def delete(implicit cs: Session) = {
     val b = relation.delete
     _one = None
+    _refreshed = true
     b
   }
 }
@@ -136,7 +149,7 @@ trait ManyToMany[O,A] extends Query[O] {
    *
    * @return the 'a' parameter is returned
    */
-  def assign(o: O, a: A): A
+  def assign(o: O, a: A)(implicit cs: Session): A
 
   /**
    * @param a: the association object
@@ -146,12 +159,12 @@ trait ManyToMany[O,A] extends Query[O] {
    *
    * @return the 'a' parameter is returned
    */
-  def associate(o: O, a: A): A
+  def associate(o: O, a: A)(implicit cs: Session): A
 
   /**
    * Creates a new association object 'a' and calls assign(o,a)
    */
-  def assign(o: O): A
+  def assign(o: O)(implicit cs: Session): A
 
   /**
    * Creates a new association object 'a' and calls associate(o,a)
@@ -160,7 +173,7 @@ trait ManyToMany[O,A] extends Query[O] {
    * foreign keys in the relations
    *  
    */
-  def associate(o: O): A
+  def associate(o: O)(implicit cs: Session): A
 
   /**
    * Causes the deletion of the 'Association object' between this side and the other side
@@ -168,12 +181,12 @@ trait ManyToMany[O,A] extends Query[O] {
    * @return true if 'o' was associated (if an association object existed between 'this' and 'o') false otherwise
    */
 
-  def dissociate(o: O): Boolean
+  def dissociate(o: O)(implicit cs: Session): Boolean
 
   /**
    *  Deletes all "associations" relating this "side" to the other
    */
-  def dissociateAll: Int
+  def dissociateAll(implicit cs: Session): Int
 
   /**
    * a Query returning all of this member's association entries 
@@ -189,31 +202,38 @@ trait ManyToMany[O,A] extends Query[O] {
 
 class StatefulManyToMany[O,A](val relation: ManyToMany[O,A]) extends Iterable[O] {
   
+  private var _refreshed = false
   private val _map = new HashMap[O,A]
 
-  refresh
-
-  def refresh = {
+  def refresh(implicit cs: Session) = {
     _map.clear
     for(e <- relation.associationMap.iterator.toSeq)
       _map.put(e._1, e._2)
+    _refreshed = true
+    this
   }
 
-  def iterator = _map.keysIterator
+  def iterator = {
+    require(_refreshed, "iterator called before relationship was refreshed")
+    _map.keysIterator
+  }
 
-  def associate(o: O, a: A) = {
+  def associate(o: O, a: A)(implicit cs: Session) = {
+    if (!_refreshed) refresh
     relation.associate(o, a)
     _map.put(o, a)
     a
   }
 
-  def associate(o: O): A = {
+  def associate(o: O)(implicit cs: Session): A = {
+    if (!_refreshed) refresh
     val a = relation.associate(o)
     _map.put(o, a)
     a
   }
 
-  def dissociate(o: O): Boolean = {
+  def dissociate(o: O)(implicit cs: Session): Boolean = {
+    if (!_refreshed) refresh
     val b1 = relation.dissociate(o)
     val b2 = _map.remove(o) != None
     assert(b1 == b2,
@@ -222,14 +242,17 @@ class StatefulManyToMany[O,A](val relation: ManyToMany[O,A]) extends Iterable[O]
     b1
   }
 
-  def dissociateAll: Int = {
+  def dissociateAll(implicit cs: Session): Int = {
     val r = relation.dissociateAll
     _map.clear
+    _refreshed = true
     r
   }
 
-  def associations: Iterable[A] =
-    _map.values.toSeq  
+  def associations: Iterable[A] = {
+    require(_refreshed, "associations called before relationship was refreshed")
+    _map.values.toSeq
+  }
 }
 
 
@@ -242,7 +265,7 @@ trait OneToMany[M] extends Query[M] {
    *
    * @return the 'm' parameter is returned
    */
-  def assign(m: M): M
+  def assign(m: M)(implicit cs: Session): M
 
   /**
    * Calls 'assign(m)' and persists the changes the database, by inserting or updating 'm', depending
@@ -250,9 +273,9 @@ trait OneToMany[M] extends Query[M] {
    *
    * @return the 'm' parameter is returned
    */
-  def associate(m: M): M
+  def associate(m: M)(implicit cs: Session): M
   
-  def deleteAll: Int
+  def deleteAll(implicit cs: Session): Int
 }
 
 trait ManyToOne[O] extends Query[O] {
@@ -262,7 +285,7 @@ trait ManyToOne[O] extends Query[O] {
    *
    * @return the 'one' parameter is returned
    */
-  def assign(one: O): O
+  def assign(one: O)(implicit cs: Session): O
 
-  def delete: Boolean
+  def delete(implicit cs: Session): Boolean
 }

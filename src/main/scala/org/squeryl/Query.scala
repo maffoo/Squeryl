@@ -21,7 +21,7 @@ import java.sql.ResultSet
 
 trait Query[R] extends Queryable[R] {
   
-  def iterator: Iterator[R]
+  def iterator(implicit cs: Session): Iterator[R]
 
   protected[squeryl] def invokeYield(rsm: ResultSetMapper, resultSet: ResultSet): R
 
@@ -30,7 +30,7 @@ trait Query[R] extends Queryable[R] {
   /**
    * returns a 'pretty' statement, i.e. values are printed instead of '?'  
    */
-  def statement: String
+  def statement(implicit cs: Session): String
 
   def ast: ExpressionNode
 
@@ -40,7 +40,7 @@ trait Query[R] extends Queryable[R] {
    * Returns the first row of the query. An exception will be thrown
    * if the query returns no row or more than one row.
    */
-  def single: R = {
+  def single(implicit cs: Session): R = {
     val i = iterator
     val r = i.next
     if(i.hasNext)
@@ -52,7 +52,7 @@ trait Query[R] extends Queryable[R] {
    * Returns Some(singleRow), None if there are none, throws an exception 
    * if the query returns more than one row.
    */
-  def singleOption: Option[R] = {
+  def singleOption(implicit cs: Session): Option[R] = {
     val i = iterator
     val res = 
       if(i.hasNext)
@@ -65,7 +65,7 @@ trait Query[R] extends Queryable[R] {
     res
   }
 
-  def headOption = {
+  def headOption(implicit cs: Session) = {
     val i = iterator
     if(i.hasNext)
       Some(i.next)

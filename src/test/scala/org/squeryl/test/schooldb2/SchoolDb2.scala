@@ -148,8 +148,8 @@ class SchoolDb2 extends Schema {
   //when a course is deleted, all of the subscriptions will get deleted :
   courseSubscriptions.leftForeignKeyDeclaration.constrainReference(onDelete cascade)
 
-  override def drop = {
-    Session.cleanupResources
+  override def drop(implicit cs: Session) = {
+    cs.cleanup
     super.drop
   }
 
@@ -169,7 +169,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
   
   import schema._
 
-  def seedDataDef = new {
+  def seedDataDef(implicit cs: Session) = new {
     
     val professeurTournesol = professors.insert(new Professor("Tournesol"))
     val madProfessor = professors.insert(new Professor("Mad Professor"))
@@ -217,7 +217,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
 //    SchoolDb2.drop
 //  }
 
-  test("associate comment"){
+  test("associate comment"){ implicit session =>
     val entry = entries.insert(Entry("An entry"))
     val comment = Comment("A single comment")
     entry.comments.associate(comment)
@@ -225,7 +225,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     from(entry.comments)(c => where(c.id === comment.id) select(c))
   }
 
-  test("UpdateWithCompositePK"){
+  test("UpdateWithCompositePK"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
 
@@ -246,7 +246,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     passed('testUpdateWithCompositePK)
   }
 
-  test("Many2ManyAssociationFromLeftSide"){
+  test("Many2ManyAssociationFromLeftSide"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
 
@@ -271,7 +271,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     passed('testMany2ManyAssociationFromLeftSide)
   }
 
-  test("Many2ManyAssociationsFromRightSide"){
+  test("Many2ManyAssociationsFromRightSide"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
 
@@ -296,7 +296,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     passed('testMany2ManyAssociationsFromRightSide)
   }
 
-  test("OneToMany"){
+  test("OneToMany"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
 
@@ -346,7 +346,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     passed('testOneToMany)
   }
 
-  test("CompositeEquality"){
+  test("CompositeEquality"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
     
@@ -387,7 +387,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     assertEquals(ca.id, oca.get.id, 'testCompositeEquality)
   }
 
-  test("UniquenessConstraint"){
+  test("UniquenessConstraint"){ implicit session =>
     val seedData = seedDataDef
     import seedData._
     
@@ -399,7 +399,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
 
     var exceptionThrown = false
 
-    val s = Session.currentSession
+    val s = implicitly[Session]
 
     val sp: Option[Savepoint] =
       if(s.databaseAdapter.failureOfStatementRequiresRollback)
@@ -442,18 +442,18 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
 //    passed('testIssue68)
 //  }
 
-  test("InFromSet"){
+  test("InFromSet"){ implicit session =>
     val set = Set("foo", "bar", "baz")
     from(entries)(e => where(e.text.in(set))select(e)).toList
     passed('testInFromSet)
   }
-  test("InFromSeq"){
+  test("InFromSeq"){ implicit session =>
     val set = Set("foo", "bar", "baz").toSeq
     from(entries)(e => where(e.text.in(set))select(e)).toList
     passed('testInFromSeq)
   }
   
-  test("Inequality with query on right hand side", SingleTestRun) {
+  test("Inequality with query on right hand side", SingleTestRun) { implicit session =>
     val seedData = seedDataDef
     import seedData._
    
@@ -488,7 +488,7 @@ abstract class SchoolDb2Tests extends SchemaTester with RunTestsInsideTransactio
     assert(belowAvg.size == 0)    
   }
   
-  test ("#73 relations with Option[] on one side of the equality expression blow up") {
+  test ("#73 relations with Option[] on one side of the equality expression blow up") { implicit session =>
 
     seedDataDef
         

@@ -2,6 +2,7 @@ package org.squeryl.logging
 
 import xml.Unparsed
 import java.io.{FileOutputStream, PrintStream}
+import org.squeryl.Session
 import org.squeryl.PrimitiveTypeMode._
 
 object BarChartRenderer {
@@ -15,7 +16,7 @@ object BarChartRenderer {
       lines.map(measureFromLike(_)).mkString("[",",","]")
   }
 
-  def generateStatSummary(staticHtmlFile: java.io.File, n: Int) = {
+  def generateStatSummary(staticHtmlFile: java.io.File, n: Int)(implicit cs: Session) = {
 
 
 

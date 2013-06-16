@@ -31,8 +31,8 @@ object SubQueryTestSchema{
     val entityType = table[EntityToTypeJoins]
     val entityEdges = table[EntityEdge]
 
-    override def drop = {
-      Session.cleanupResources
+    override def drop(implicit cs: Session) = {
+      cs.cleanup
       super.drop
     }
   }
@@ -44,7 +44,7 @@ abstract class SubQueryTests extends SchemaTester with RunTestsInsideTransaction
 
   final def schema = TestSchema
 
-  test("Missing internal state, cant copy") {
+  test("Missing internal state, cant copy") { implicit session =>
     import TestSchema._
 
     val name = "llll"

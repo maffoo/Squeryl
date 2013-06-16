@@ -72,8 +72,8 @@ object SchoolDb2 extends Schema {
   override def applyDefaultForeignKeyPolicy(foreignKeyDeclaration: ForeignKeyDeclaration) =
     foreignKeyDeclaration.constrainReference
 
-  override def drop = {
-    Session.cleanupResources
+  override def drop(implicit cs: Session) = {
+    cs.cleanup
     super.drop
   }
 }
@@ -84,7 +84,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
 
   val schema = SchoolDb2
 
-  def instance = new {
+  def instance(implicit cs: Session) = new {
 
     import schema._
 
@@ -102,7 +102,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
   }
 
 
-  test("Many2ManyAssociationFromLeftSide"){
+  test("Many2ManyAssociationFromLeftSide"){ implicit session =>
 
     import SchoolDb2._
 
@@ -130,7 +130,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
     passed('testMany2ManyAssociationFromLeftSide)
   }
 
-  test("Many2ManyAssociationFromRightSide"){
+  test("Many2ManyAssociationFromRightSide"){ implicit session =>
 
     import SchoolDb2._
     val i = instance
@@ -169,7 +169,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
     passed('testMany2ManyAssociationsFromRightSide)
   }
 
-  test("OneToMany"){
+  test("OneToMany"){ implicit session =>
 
     import SchoolDb2._
     val i = instance
@@ -195,7 +195,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
 
     for(s0 <- s ) {
       var sCnt = 0
-      for(c <- s0.courses) {
+      for(c <- s0.courses.refresh) {
         cnt += 1
         sCnt += 1
       }
@@ -219,7 +219,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
     // since the relation is lazy and we haven't touched it yet...
 
     assertEquals(
-      philosophyCourse2PMWednesday.subject.one.get.name,
+      philosophyCourse2PMWednesday.subject.refresh.one.get.name,
       philosophy.name,
       'testOneToMany)
 
@@ -245,7 +245,7 @@ abstract class SchoolDb2MetableRelations extends SchemaTester with QueryTester w
     // 2) philosophyCourse3PMFriday.subject points to the proper subject
     assertEquals(
       computationTheory.name,
-      philosophyCourse3PMFriday.subject.one.get.name,
+      philosophyCourse3PMFriday.subject.refresh.one.get.name,
       'testOneToMany)
 
     passed('testOneToMany)

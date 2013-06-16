@@ -15,7 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.adapters
 
-import org.squeryl.{ReferentialAction, Table}
+import org.squeryl.{ReferentialAction, Session, Table}
 import java.sql.SQLException
 import org.squeryl.internals.{StatementWriter, DatabaseAdapter}
 import org.squeryl.dsl.ast.{BinaryOperatorNode, ExpressionNode}
@@ -96,14 +96,14 @@ class MySQLAdapter extends DatabaseAdapter {
 
   override def supportsForeignKeyConstraints = false
 
-  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter) = {
+  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter)(implicit cs: Session) = {
     sw.write("(")
     left.write(sw)
     sw.write(" regexp ?)")
     sw.addParam(pattern)
   }
 
-  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter) = {
+  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     sw.write("concat(")
     left.write(sw)
     sw.write(",")

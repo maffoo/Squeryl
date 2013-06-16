@@ -234,15 +234,16 @@ class SchoolDb extends Schema {
   
   // disable the override, since the above is good for Oracle only, this is not a usage demo, but
   // a necessary hack to test the dbType override mechanism and still allow the test suite can run on all database :
-  override def columnTypeFor(fieldMetaData: FieldMetaData, owner: Table[_])  =
-    if(fieldMetaData.nameOfProperty == "yearlySalary" && Session.currentSession.databaseAdapter.isInstanceOf[OracleAdapter])
-      Some("float")
-    else
-      None
+  // XXX: might need to add implicit session parameter here in Schema class
+  //override def columnTypeFor(fieldMetaData: FieldMetaData, owner: Table[_]) =
+  //  if(fieldMetaData.nameOfProperty == "yearlySalary" && session.databaseAdapter.isInstanceOf[OracleAdapter])
+  //    Some("float")
+  //  else
+  //    None
 
 
-  override def drop = {
-    Session.cleanupResources
+  override def drop(implicit cs: Session) = {
+    cs.cleanup
     super.drop
   }
 
@@ -286,7 +287,7 @@ class SchoolDb extends Schema {
 
 }
 
-class TestInstance(schema : SchoolDb){
+class TestInstance(schema : SchoolDb)(implicit cs: Session){
   import schema._
   val oneHutchissonStreet = addresses.insert(new Address("Hutchisson",1, None,None,None))
   val twoHutchissonStreet = addresses.insert(new Address("Hutchisson",2, None,None,None))
@@ -326,7 +327,7 @@ abstract class FullOuterJoinTests extends SchoolDbTestBase{
 
 
 
-  test("NewLeftOuterJoin1Reverse")  {
+  test("NewLeftOuterJoin1Reverse") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     //loggerOn
@@ -361,7 +362,7 @@ abstract class SchoolDbTestBase extends SchemaTester with QueryTester with RunTe
 
   var sharedTestInstance : TestInstance = null
 
-  override def prePopulate() {
+  override def prePopulate(implicit cs: Session) {
     sharedTestInstance = new TestInstance(schema)
   }
 
@@ -373,12 +374,12 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
   
   
   
-  test("StringKeyedEntities"){
+  test("StringKeyedEntities"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val se = stringKeyedEntities.insert(new StringKeyedEntity("123", Tempo.Largo))
   }
 
-  test("CountSignatures"){
+  test("CountSignatures"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q =
       from(courseSubscriptions)(cs =>
@@ -423,7 +424,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
       select(&(a.numberz || " " || a.streetName || " " || a.appNumber))
     )
 
-  test("DeepNest1"){
+  test("DeepNest1"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val q = from(professors)(p0 => select(p0))
@@ -441,14 +442,14 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 //    schools.update(new School(0,"École Bussonière",12))
 //  }
 
-  test("KeyedEntityIdRenaming"){
+  test("KeyedEntityIdRenaming"){ implicit session =>
 
     postalCodes.insert(PostalCode("J0B-2C0"))
 
     passed('testKeyedEntityIdRenaming)
   }
 
-  test("DeepNest2"){
+  test("DeepNest2"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val q = from(from(from(professors)(p0 => select(p0)))(p1 => select(p1)))(p2 => select(p2))
@@ -462,13 +463,13 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testDeepNest)
   }
 
-  test("assertColumnNameChangeWithDeclareSyntax") {
-    val st = Session.currentSession.connection.createStatement()
+  test("assertColumnNameChangeWithDeclareSyntax") { implicit session =>
+    val st = session.connection.createStatement()
     val r = st.execute("select the_Last_Name from t_professor")                                                        
     // this should not blow up...
   }
   
-  test("OptionStringInWhereClause"){
+  test("OptionStringInWhereClause"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val q =
@@ -483,7 +484,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testOptionStringInWhereClause)
   }
 
-  test("blobTest"){
+  test("blobTest"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var c = courses.where(_.id === counterpoint.id).single
@@ -507,7 +508,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('blobTest)
   }
 
-  test("InOpWithStringList"){
+  test("InOpWithStringList"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val r =
       from(students)(s=>
@@ -520,7 +521,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testInOpWithStringList)
   }
   
-  test("transient annotation") {
+  test("transient annotation") { implicit session =>
     
 
     val s = schools.insert(new School(123,"EB123",0, "transient !"))
@@ -533,7 +534,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     
   }
   
-  test("lifecycleCallbacks") {
+  test("lifecycleCallbacks") { implicit session =>
 
 
     beforeInsertsOfPerson.clear
@@ -573,7 +574,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
   }
 
 
-  test("MetaData"){
+  test("MetaData"){ implicit session =>
 
     val testInstance = sharedTestInstance; import testInstance._
 
@@ -589,12 +590,12 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testMetaData )
   }
 
-  test("OptionAndNonOptionMixInComputeTuple"){
+  test("OptionAndNonOptionMixInComputeTuple"){ implicit session =>
     val t:Product4[Option[Float],Option[Float],Option[Double], Long] = avgStudentAgeFunky
     passed('testOptionAndNonOptionMixInComputeTuple)
   }
 
-  test("testServerSideFunctionCall") {
+  test("testServerSideFunctionCall") { implicit session =>
 
     val s =
       from(students)(s =>
@@ -608,8 +609,8 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testServerSideFunctionCall)
   }
 
-  test("ConcatWithOptionalCols"){
-    val dbAdapter = Session.currentSession.databaseAdapter
+  test("ConcatWithOptionalCols"){ implicit session =>
+    val dbAdapter = session.databaseAdapter
     if(!dbAdapter.isInstanceOf[MSSQLServer] && !dbAdapter.isInstanceOf[DerbyAdapter]) {
       // concat doesn't work in Derby with numeric fields.
       // see: https://issues.apache.org/jira/browse/DERBY-1306
@@ -620,13 +621,13 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     }
   }
 
-  test("ScalarOptionQuery"){
+  test("ScalarOptionQuery"){ implicit session =>
     val avgAge:Option[Float] = avgStudentAge
     //println("avgAge = " + avgAge)
     passed('testScalarOptionQuery )
   }
 
-  test("LikeOperator"){
+  test("LikeOperator"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q =
       from(students)(s=>
@@ -639,7 +640,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     
   }
 
-  test("SingleOption"){
+  test("SingleOption"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q =
       from(students)(s=>
@@ -668,7 +669,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     q2.singleOption should equal(Some(gontran.id))
   }  
     
-  test("isNull and === None comparison"){  
+  test("isNull and === None comparison"){ implicit session =>
     val z1 =
       from(students)(s=>
         where({
@@ -705,7 +706,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 //    validateQuery('testNotOperator, q, identity[Int], List(xiao.id, pratap.id))
 //  }
 
-  test("DateTypeMapping"){
+  test("DateTypeMapping"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val mandarinCourse =
@@ -727,7 +728,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testDateTypeMapping )
   }
 
-  test("DateOptionMapping"){
+  test("DateOptionMapping"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var groupTh =
@@ -777,7 +778,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testDateOptionMapping )
   }
 
-  test("DateComparisonInWhereClause"){
+  test("DateComparisonInWhereClause"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
 //    val feb2010 = dateFormat.parse("2010-02-01")
@@ -806,7 +807,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testDateComparisonInWhereClause )
   }
 
-  test("DateOptionComparisonInWhereClause"){
+  test("DateOptionComparisonInWhereClause"){ implicit session =>
      val testInstance = sharedTestInstance; import testInstance._
 //    val jan2009 = dateFormat.parse("2009-01-01")
 //...
@@ -854,7 +855,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testDateOptionComparisonInWhereClause )
   }
 
-  test("NVLFunction"){
+  test("NVLFunction"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
 //    val groupTheory = courses.insert(new Course("Group Theory", jan2009, Some(may2009), 0, None, false))
@@ -878,7 +879,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testNVLFunction )
   }
 
-  test("LongTypeMapping"){
+  test("LongTypeMapping"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var ht = courses.where(c => c.id === heatTransfer.id).single
@@ -913,7 +914,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testLongTypeMapping)
   }
 
-  test("BooleanTypeMapping"){
+  test("BooleanTypeMapping"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var ht = courses.where(c => c.id === heatTransfer.id).single
@@ -946,7 +947,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testBooleanTypeMapping)
   }
 
-  test("BooleanOptionMapping"){
+  test("BooleanOptionMapping"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     //println(students.where(s => s.id === gontran.id).dumpAst)
@@ -973,7 +974,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testBooleanOptionMapping)
   }
 
-  test("FloatType"){
+  test("FloatType"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var t = professors.where(p => p.id === tournesol.id).single
@@ -1003,7 +1004,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testFloatType)
   }
 
-  test("ForUpdate") {
+  test("ForUpdate") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     var t = professors.where(p => p.id === tournesol.id).forUpdate.single
 
@@ -1015,7 +1016,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 
 
 
-  test("PartialUpdate1") {
+  test("PartialUpdate1") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val initialHT = courses.where(c => c.id === heatTransfer.id).single
@@ -1060,7 +1061,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testPartialUpdate1)
   }
 
-  test("PartialUpdateWithInclusionOperator ") {
+  test("PartialUpdateWithInclusionOperator ") { implicit session =>
 
     update(courses)(c =>
       where(c.id in from(courses)(c0=> where(c0.id lt -1) select(c0.id)))
@@ -1071,7 +1072,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testPartialUpdateWithInclusionOperator)
   }
 
-  test("HavingClause") {
+  test("HavingClause") { implicit session =>
     //The query here doesn't make much sense, we just test that valid SQL gets generated :
     val q =
       from(professors)(p=>
@@ -1085,7 +1086,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testHavingClause)
   }
 
-  test("HavingClause2") {
+  test("HavingClause2") { implicit session =>
     //The query here doesn't make much sense, we just test that valid SQL gets generated :
     val q =
       from(professors)(p=> {
@@ -1104,7 +1105,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     assert(q.statement.indexOf("Having") != -1)
   }
 
-  test("PartialUpdateWithSubQueryInSetClause") {
+  test("PartialUpdateWithSubQueryInSetClause") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val zarnitsyn = professors.insert(new Professor("zarnitsyn", 60.0F, Some(70.5F), 60.0F, Some(70.5F)))
@@ -1132,10 +1133,10 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testPartialUpdateWithSubQueryInSetClause)
   }
 
-  test("OptimisticCC1") {
+  test("OptimisticCC1") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
-    Session.currentSession.connection.commit // we commit to release all locks
+    session.connection.commit // we commit to release all locks
 
     var ht = courses.where(c => c.id === heatTransfer.id).single
 
@@ -1164,7 +1165,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testOptimisticCC1)
   }
 
-  test("BatchInserts1") {
+  test("BatchInserts1") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     addresses.insert(List(
       new Address("St-Dominique",14, None,None,None),
@@ -1189,7 +1190,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testBatchInserts1)
   }
 
-  test("BatchUpdate1") {
+  test("BatchUpdate1") { implicit session =>
     
     val testInstance = sharedTestInstance; import testInstance._
     import schema._
@@ -1223,7 +1224,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testBatchUpdate1)
   }
   
-  test("BatchUpdateAndInsert2") {
+  test("BatchUpdateAndInsert2") { implicit session =>
     
     val testInstance = sharedTestInstance; import testInstance._
     import schema._
@@ -1246,7 +1247,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('BatchUpdateAndInsert2)
   }
 
-  test("BigDecimal") {
+  test("BigDecimal") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val pt = professors.where(_.yearlySalaryBD.between(75, 80))
@@ -1297,7 +1298,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     assertEquals(1, babaZula5.Count : Long, 'testBigDecimal)
   }
 
-  test("YieldInspectionResidue") {
+  test("YieldInspectionResidue") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val z = from(students)(s => where(s.lastName === "Jimbao Gallois") select(s.name)).single
@@ -1309,7 +1310,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testYieldInspectionResidue)
   }
 
-  test("InWithCompute") {
+  test("InWithCompute") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val z0 =
       from(students)(s2 =>
@@ -1332,7 +1333,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testInWithCompute)
   }
 
-  test("IsNotNullWithInhibition") {
+  test("IsNotNullWithInhibition") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q =
       from(students)(s =>
@@ -1357,7 +1358,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testInWithCompute)
   }
   
-  test("NewJoin1") {
+  test("NewJoin1") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
       val q =
        join(students, addresses.leftOuter, addresses)((s,a1,a2) => {
@@ -1373,7 +1374,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testNewJoin1)
   }
 
-  test("NewLeftOuterJoin1")  {
+  test("NewLeftOuterJoin1")  { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     //loggerOn
@@ -1402,7 +1403,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
   }
 
 
-  test("#62 CompositeKey with Option members generate sql with = null instead of is null")  {
+  test("#62 CompositeKey with Option members generate sql with = null instead of is null") { implicit session =>
     
     val testInstance = sharedTestInstance; import testInstance._
     // this should not blow up :
@@ -1411,7 +1412,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     q.toList
   }
 
-  test("NewLeftOuterJoin2")  {
+  test("NewLeftOuterJoin2") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     //loggerOn
@@ -1439,7 +1440,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testNewOuterJoin2 )
   }
 
-  test("Boolean2LogicalBooleanConversion") {
+  test("Boolean2LogicalBooleanConversion") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val multilingualStudents = students.where(_.isMultilingual === Option(true)).map(_.id).toSet
@@ -1452,7 +1453,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testBoolean2LogicalBooleanConversion)
   }
 
-  test("AvgBigDecimal") {
+  test("AvgBigDecimal") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val avgSalary: Option[BigDecimal] =
@@ -1482,7 +1483,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testAvgBigDecimal)
   }
 
-  test("NewLeftOuterJoin3")  {
+  test("NewLeftOuterJoin3") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     //loggerOn
@@ -1513,7 +1514,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testNewOuterJoin3 )
   }
   
-  test("TestYieldInspectionLeakViaCGLIB", SingleTestRun) {
+  test("TestYieldInspectionLeakViaCGLIB", SingleTestRun) { implicit session =>
       tests.insert(List(YieldInspectionTest(1, 100), YieldInspectionTest(1,500), YieldInspectionTest(2,600)))
       others.insert(List(YieldInspectionAnother(1, "One", 1), YieldInspectionAnother(2, "Two", 2)))
 
@@ -1525,7 +1526,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
         ).toList
   }
 
-  test("Exists")  {
+  test("Exists") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val studentsWithAnAddress =
       from(students)(s =>
@@ -1541,7 +1542,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testExists)
   }
 
-  test("NotExists")  {
+  test("NotExists")  { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val studentsWithNoAddress =
       from(students)(s =>
@@ -1556,7 +1557,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
     passed('testNotExists)
   }
 
-  test("VeryNestedExists")  {
+  test("VeryNestedExists")  { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val qStudents = from(students) ((s) => select(s))
     val qStudentsFromStudents = from(qStudents) ((s) => select(s))
@@ -1576,7 +1577,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 
   }
 
-  test("VeryVeryNestedExists"){
+  test("VeryVeryNestedExists"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val qStudents = from(students) ((s) => select(s))
     val qStudentsFromStudents = from(qStudents) ((s) => select(s))
@@ -1600,7 +1601,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 
   }
 
-  test("selectFromExists"){
+  test("selectFromExists"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val qStudents = from(students) ((s) => select(s))
     val studentsWithAnAddress =
@@ -1624,7 +1625,7 @@ abstract class SchoolDbTestRun extends SchoolDbTestBase {
 
   }
   
-  test("UpdateSetAll") {
+  test("UpdateSetAll") { implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     update(students)(s => setAll(s.age := Some(30)))
 
@@ -1649,11 +1650,11 @@ abstract class Issue14 extends DbTestBase with QueryTester {
 
 
 
-  test("Issue14"){
+  test("Issue14"){ implicit session =>
     try {
       transaction {
-        Session.currentSession.setLogger(println(_))
-        val stmt = Session.currentSession.connection.createStatement
+        session.setLogger(println(_))
+        val stmt = session.connection.createStatement
         stmt.execute("""create table issue14 (
     yearly_Salary real not null,
     weight_In_B_D decimal(20,16),
@@ -1687,7 +1688,7 @@ abstract class Issue14 extends DbTestBase with QueryTester {
       }
     }
     finally {
-      transaction {Issue14Schema.drop}
+      transaction { Issue14Schema.drop }
     }
   }
 }

@@ -1,12 +1,12 @@
 package org.squeryl.dsl
 
-import org.squeryl.Query
+import org.squeryl.{Query, Session}
 import org.squeryl.internals.ResultSetMapper
 import java.sql.ResultSet
 
 class DelegateQuery[M](val q: Query[M]) extends Query[M] {
 
-  def iterator = q.iterator
+  def iterator(implicit cs: Session) = q.iterator
 
   def distinct = q.distinct
 
@@ -16,7 +16,7 @@ class DelegateQuery[M](val q: Query[M]) extends Query[M] {
 
   def page(offset:Int, length:Int) = q.page(offset, length)
 
-  def statement: String = q.statement
+  def statement(implicit cs: Session): String = q.statement
 
   def ast = q.ast
 

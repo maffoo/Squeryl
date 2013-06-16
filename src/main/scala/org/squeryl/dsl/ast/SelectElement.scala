@@ -61,9 +61,9 @@ trait SelectElement extends ExpressionNode {
 
   def resultSetMapper: ResultSetMapper
 
-  def alias: String
+  def alias(implicit cs: Session): String
 
-  def aliasSegment: String =
+  def aliasSegment(implicit cs: Session): String =
     alias
 
   def actualSelectElement: SelectElement = this
@@ -107,7 +107,7 @@ trait SelectElement extends ExpressionNode {
 
   override def children = List(expression)
 
-  def doWrite(sw: StatementWriter) = {
+  def doWrite(sw: StatementWriter)(implicit cs: Session) = {
     expression.write(sw)
     sw.write(" as ")
     sw.databaseAdapter.writeSelectElementAlias(this, sw)
@@ -121,7 +121,7 @@ class TupleSelectElement
   def resultSetMapper: ResultSetMapper = throw new UnsupportedOperationException("refactor me")
 
   //TODO: normalize ?
-  def alias =
+  def alias(implicit cs: Session) =
     if(isGroupTuple)
       "g" + indexInTuple
     else
@@ -143,26 +143,26 @@ class TupleSelectElement
       columnToTupleMapper.get.activate(indexInTuple, jdbcIndex)
 
   override def toString =
-    'TupleSelectElement + ":" + indexInTuple + ":" + writeToString
+    'TupleSelectElement + ":" + indexInTuple + ":" //+ writeToString // XXX: can only write to string with session
 }
 
 class FieldSelectElement
 (val origin: ViewExpressionNode[_], val fieldMetaData: FieldMetaData, val resultSetMapper: ResultSetMapper)
   extends SelectElement with UniqueIdInAliaseRequired {
 
-  def alias =
+  def alias(implicit cs: Session) =
     if(inhibitAliasOnSelectElementReference)
       fieldMetaData.columnName
     else
       origin.alias + "." + fieldMetaData.columnName
 
-  override def aliasSegment: String =
-    Session.currentSession.databaseAdapter.fieldAlias(origin, this)
+  override def aliasSegment(implicit cs: Session): String =
+    cs.databaseAdapter.fieldAlias(origin, this)
     //origin.alias + "_" + fieldMetaData.columnName
   
   val expression = new ExpressionNode {
     
-    def doWrite(sw: StatementWriter) =
+    def doWrite(sw: StatementWriter)(implicit cs: Session) =
       sw.write(sw.quoteName(alias))
   }
 
@@ -182,15 +182,15 @@ class FieldSelectElement
     fieldMetaData.displayType
   
   override def toString =
-    'FieldSelectElement + ":" +
-       Utils.failSafeString(alias, fieldMetaData.nameOfProperty)
+    'FieldSelectElement + ":" //+
+       //Utils.failSafeString(alias, fieldMetaData.nameOfProperty) // XXX: can only create alias with Session
 }
 
 class ValueSelectElement
   (val expression: ExpressionNode, val resultSetMapper: ResultSetMapper, mapper: OutMapper[_], val origin: QueryExpressionNode[_])
      extends SelectElement with UniqueIdInAliaseRequired {
 
-  def alias = "v" + uniqueId.get
+  def alias(implicit cs: Session) = "v" + uniqueId.get
 
   var yieldPusher: Option[YieldValuePusher] = None
 
@@ -211,7 +211,7 @@ class ValueSelectElement
     }
 
   override def toString =
-    'ValueSelectElement + ":" + expression.writeToString  
+    'ValueSelectElement + ":" //+ expression.writeToString // XXX: can only write to string with Session
 }
 
 /**
@@ -224,7 +224,7 @@ class SelectElementReference[A,T]
     extends TypedExpression[A,T] {
     
   override def toString =
-    'SelectElementReference + ":" + Utils.failSafeString(delegateAtUseSite.alias) + ":" + selectElement.typeOfExpressionToString + inhibitedFlagForAstDump
+    'SelectElementReference + ":" //+ Utils.failSafeString(delegateAtUseSite.alias) + ":" + selectElement.typeOfExpressionToString + inhibitedFlagForAstDump
 
   override def inhibited =
     selectElement.inhibited
@@ -258,7 +258,7 @@ class SelectElementReference[A,T]
       }
     }
 
-  override def doWrite(sw: StatementWriter) =
+  override def doWrite(sw: StatementWriter)(implicit cs: Session) =
     sw.write(sw.quoteName(delegateAtUseSite.alias))
 }
 
@@ -287,25 +287,25 @@ class ExportedSelectElement
 
   val expression = new ExpressionNode {
 
-    def doWrite(sw: StatementWriter) =
+    def doWrite(sw: StatementWriter)(implicit cs: Session) =
     sw.write(sw.quoteName(alias))
   }
 
   override def toString =
-    'ExportedSelectElement + ":" + alias + ",(selectElement=" + selectElement + ")"
+    'ExportedSelectElement + ":" //+ alias + ",(selectElement=" + selectElement + ")" // XXX: can only compute alias with Session
 
-  def alias:String =
+  def alias(implicit cs: Session): String =
     if (isDirectOuterReference)
       selectElement.alias
     else
       target.parent.get.asInstanceOf[QueryableExpressionNode].alias + "." + target.aliasSegment
 
-  override def aliasSegment: String =
+  override def aliasSegment(implicit cs: Session): String =
     //target.parent.get.asInstanceOf[QueryableExpressionNode].alias + "_" + target.aliasSegment
     if (isDirectOuterReference)
       selectElement.aliasSegment
     else
-      Session.currentSession.databaseAdapter.aliasExport(
+      cs.databaseAdapter.aliasExport(
         target.parent.get.asInstanceOf[QueryableExpressionNode], target)
 
   /**

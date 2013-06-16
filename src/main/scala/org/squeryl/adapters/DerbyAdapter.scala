@@ -15,7 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.adapters
 
-import org.squeryl.Schema
+import org.squeryl.{Schema, Session}
 import org.squeryl.internals.{StatementWriter, FieldMetaData, DatabaseAdapter}
 import org.squeryl.dsl.ast._
 import java.sql.SQLException
@@ -63,7 +63,7 @@ class DerbyAdapter extends DatabaseAdapter {
   override def isTableDoesNotExistException(e: SQLException) =
     e.getSQLState == "42Y55"
 
-  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter) =
+  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter)(implicit cs: Session) =
     throw new UnsupportedOperationException("Derby does not support a regex scalar function")
 
   override def quoteIdentifier(s: String) = "\"" + s + "\""

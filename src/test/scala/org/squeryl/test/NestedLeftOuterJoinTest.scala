@@ -8,7 +8,7 @@ object TestSchema extends Schema {
   val a = table[A]
   val b = table[B]
 
-  override def drop = super.drop
+  override def drop(implicit cs: Session) = super.drop
 }
 
 class A(val id: Int, val name: String) extends KeyedEntity[Int]
@@ -19,7 +19,7 @@ abstract class NestedLeftOuterJoinTest extends SchemaTester with RunTestsInsideT
 
   def schema = TestSchema
 
-  def testInnerJoin() = {
+  def testInnerJoin(implicit cs: Session) = {
     val q0 = from(TestSchema.b)( b => select(b) )
 
     val q1 = from(TestSchema.a, q0) ( (a, b) =>
@@ -38,7 +38,7 @@ abstract class NestedLeftOuterJoinTest extends SchemaTester with RunTestsInsideT
     checkJoinQuery(q2)
   }
 
-  test("InnerJoin"){
+  test("InnerJoin"){ implicit session =>
 
     TestSchema.a.insert(new A(1, "a one"))
 
@@ -64,7 +64,7 @@ abstract class NestedLeftOuterJoinTest extends SchemaTester with RunTestsInsideT
     checkLeftJoinQuery(aQuery)
   }
 
-  def checkLeftJoinQuery(q: Query[(A, Option[B])]) {
+  def checkLeftJoinQuery(q: Query[(A, Option[B])])(implicit cs: Session) {
     q.headOption.map { (result) =>
       val (a, b) = result
 
@@ -72,7 +72,7 @@ abstract class NestedLeftOuterJoinTest extends SchemaTester with RunTestsInsideT
     }
   }
 
-  def checkJoinQuery(q: Query[(A, B)]) {
+  def checkJoinQuery(q: Query[(A, B)])(implicit cs: Session) {
     q.headOption should not equal(None)
   }
 

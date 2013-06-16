@@ -90,7 +90,7 @@ class FieldMetaData(
    */
   private val _sequenceNamePerDBAdapter = new HashMap[Class[_],String]
 
-  def sequenceName: String = {
+  def sequenceName(implicit cs: Session): String = {
 
     val ai = _columnAttributes.find(_.isInstanceOf[AutoIncremented]).
       getOrElse(org.squeryl.internals.Utils.throwError(this + " is not declared as autoIncremented, hence it has no sequenceName")).
@@ -101,14 +101,14 @@ class FieldMetaData(
     }
 
     synchronized {
-      val c = Session.currentSession.databaseAdapter.getClass
+      val c = cs.databaseAdapter.getClass
 
       val s = _sequenceNamePerDBAdapter.get(c)
 
       if(s != None)
         return s.get
 
-      val s0 = Session.currentSession.databaseAdapter.createSequenceName(this)
+      val s0 = cs.databaseAdapter.createSequenceName(this)
       
       _sequenceNamePerDBAdapter.put(c, s0)
 

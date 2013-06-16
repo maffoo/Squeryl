@@ -52,7 +52,7 @@ trait QueryDsl
         None
   } 
 
-  implicit def queryToIterable[R](q: Query[R]): Iterable[R] = {
+  implicit def queryToIterable[R](q: Query[R])(implicit cs: Session): Iterable[R] = {
     
     val i = q.iterator
                 
@@ -74,124 +74,53 @@ trait QueryDsl
       
     }
   }
-  
-//  implicit def viewToIterable[R](t: View[R]): Iterable[R] = 
-//      queryToIterable(view2QueryAll(t))
-  
 
-  def using[A](session: Session)(a: =>A): A =
-    _using(session, a _)
-
-  private def _using[A](session: Session, a: ()=>A): A = {
-    val s = Session.currentSessionOption
-    try {
-      if(s != None) s.get.unbindFromCurrentThread
-      try {
-        session.bindToCurrentThread
-        val r = a()
-        r
-      }
-      finally {
-        session.unbindFromCurrentThread
-        session.cleanup
-      }
-    }
-    finally {
-      if(s != None) s.get.bindToCurrentThread
-    }
+  def using[A](s: => Session)(a: Session => A): A = {
+    val session = s
+    session.connection.setAutoCommit(true)
+    try a(session) finally session.close
   }
 
-  def transaction[A](sf: SessionFactory)(a: =>A) = 
-    _executeTransactionWithin(sf.newSession, a _)
-  
-  def inTransaction[A](sf: SessionFactory)(a: =>A) =
-    if(! Session.hasCurrentSession)
-      _executeTransactionWithin(sf.newSession, a _)
-    else
-      _executeTransactionWithin(Session.currentSession, a _)
-
-   def transaction[A](s: Session)(a: =>A) = 
-     _executeTransactionWithin(s, a _)
-   
   /**
-   * 'transaction' causes a new transaction to begin and commit after the block execution, or rollback
-   * if an exception occurs. Invoking a transaction always cause a new one to
-   * be created, even if called in the context of an existing transaction.
+   * Run the given block of code within a transaction in the context
+   * of the given session. If a transaction is already in progress,
+   * this has no effect. Otherwise this starts a transaction and then
+   * calls either commit if the block executes successfully, or rollback
+   * if an exception is thrown
    */
-  def transaction[A](a: =>A): A =
-    if(! Session.hasCurrentSession)
-      _executeTransactionWithin(SessionFactory.newSession, a _)
-    else {
-      val s = Session.currentSession
-      val res =
-        try {
-          s.unbindFromCurrentThread
-          _executeTransactionWithin(SessionFactory.newSession, a _)
-        }
-        finally {
-          s.bindToCurrentThread
-        }
-      res
-    }
+  def transaction[A](a: => A)(implicit session: Session) = {
+    val c = session.connection
 
-  /**
-   * 'inTransaction' will create a new transaction if none is in progress and commit it upon
-   * completion or rollback on exceptions. If a transaction already exists, it has no
-   * effect, the block will execute in the context of the existing transaction. The
-   * commit/rollback is handled in this case by the parent transaction block.
-   */
-  def inTransaction[A](a: =>A): A =
-    if(! Session.hasCurrentSession)
-      _executeTransactionWithin(SessionFactory.newSession, a _)
-    else {
+    if (!c.getAutoCommit) {
+      // already in a transaction
       a
-    }
-
-  private def _executeTransactionWithin[A](s: Session, a: ()=>A) = {
-
-    val c = s.connection
-
-    val originalAutoCommit = c.getAutoCommit
-    if(originalAutoCommit)
-      c.setAutoCommit(false)
-
-    var txOk = false
-    try {
-      val res = _using(s, a)
-      txOk = true
-      res
-    }
-    catch {
-      case e:NonLocalReturnControl[_] => 
-      {
-        txOk = true
-        throw e
-      }
-    }
-    finally {
+    } else {
+      // start a new transaction
       try {
-        if(txOk)
-          c.commit
-        else
-          c.rollback
-        if(originalAutoCommit != c.getAutoCommit)
-          c.setAutoCommit(originalAutoCommit)
-      }
-      catch {
-        case e:SQLException => {
-          Utils.close(c)
-          if(txOk) throw e // if an exception occured b4 the commit/rollback we don't want to obscure the original exception 
+        c.setAutoCommit(false)
+        var txOk = false
+        try {
+          val res = a
+          txOk = true
+          res
+        } catch {
+          case e: NonLocalReturnControl[_] =>
+            txOk = true
+            throw e
+        } finally {
+          if (txOk) c.commit else c.rollback
         }
-      }
-      try{c.close}
-      catch {
-        case e:SQLException => {
-          if(txOk) throw e // if an exception occured b4 the close we don't want to obscure the original exception
-        }
+      } finally {
+        c.setAutoCommit(true)
       }
     }
   }
-  
+
+  /**
+   * Synonym for `transaction`
+   */
+  def inTransaction[A](a: => A)(implicit cs: Session): A = transaction(a)
+
   implicit def __thisDsl:QueryDsl = this  
 
   private class QueryElementsImpl[Cond](override val whereClause: Option[()=>LogicalBoolean])
@@ -282,7 +211,7 @@ trait QueryDsl
     new ConcatOperationNode[Option[String],TOptionString](co.a1, co.a2, PrimitiveTypeMode.optionStringTEF.createOutMapper)
   
   class ConcatOperationNode[A,T](e1: ExpressionNode, e2: ExpressionNode, val mapper: OutMapper[A]) extends BinaryOperatorNode(e1,e2, "||", false) with TypedExpression[A,T] {
-    override def doWrite(sw: StatementWriter) =
+    override def doWrite(sw: StatementWriter)(implicit cs: Session) =
       sw.databaseAdapter.writeConcatOperator(e1, e2, sw)       
   }
     
@@ -296,7 +225,7 @@ trait QueryDsl
 
   trait ScalarQuery[T] extends Query[T] with SingleColumnQuery[T] with SingleRowQuery[T]
 
-  implicit def scalarQuery2Scalar[T](sq: ScalarQuery[T]) = sq.head
+  implicit def scalarQuery2Scalar[T](sq: ScalarQuery[T])(implicit cs: Session) = sq.head
 
   implicit def countQueryableToIntTypeQuery[R](q: Queryable[R]) = new CountSubQueryableQuery(q)
 
@@ -317,7 +246,7 @@ trait QueryDsl
     
     def mapper = PrimitiveTypeMode.longTEF.createOutMapper    
     
-    override def doWrite(sw: StatementWriter) = {
+    override def doWrite(sw: StatementWriter)(implicit cs: Session) = {
 
       sw.write(name)
       sw.write("(")
@@ -337,11 +266,11 @@ trait QueryDsl
     private val _inner:Query[Measures[Long]] =
       from(q)(r => compute(_countFunc))
 
-    def iterator = _inner.map(m => m.measures).iterator
+    def iterator(implicit cs: Session) = _inner.map(m => m.measures).iterator
 
     def Count: ScalarQuery[Long] = this
 
-    def statement: String = _inner.statement
+    def statement(implicit cs: Session): String = _inner.statement
 
     // Paginating a Count query makes no sense perhaps an org.squeryl.internals.Utils.throwError() would be more appropriate here:
     def page(offset:Int, length:Int) = this      
@@ -367,11 +296,11 @@ trait QueryDsl
 
   implicit def singleColComputeQuery2ScalarQuery[T](cq: Query[Measures[T]]): ScalarQuery[T] = new ScalarMeasureQuery[T](cq)
   
-  implicit def singleColComputeQuery2Scalar[T](cq: Query[Measures[T]]) = new ScalarMeasureQuery[T](cq).head
+  implicit def singleColComputeQuery2Scalar[T](cq: Query[Measures[T]])(implicit cs: Session) = new ScalarMeasureQuery[T](cq).head
 
   class ScalarMeasureQuery[T](q: Query[Measures[T]]) extends Query[T] with ScalarQuery[T] {
 
-    def iterator = q.map(m => m.measures).iterator
+    def iterator(implicit cs: Session) = q.map(m => m.measures).iterator
 
     def distinct = this
 
@@ -382,7 +311,7 @@ trait QueryDsl
     // TODO: think about this : Paginating a Count query makes no sense perhaps an org.squeryl.internals.Utils.throwError() would be more appropriate here.
     def page(offset:Int, length:Int) = this
     
-    def statement: String = q.statement
+    def statement(implicit cs: Session): String = q.statement
     
     def ast = q.ast
 
@@ -404,7 +333,7 @@ trait QueryDsl
 
   //implicit def view2QueryAll[A](v: View[A]) = from(v)(a=> select(a))
 
-  def update[A](t: Table[A])(s: A =>UpdateStatement):Int = t.update(s)
+  def update[A](t: Table[A])(s: A =>UpdateStatement)(implicit cs: Session):Int = t.update(s)
 
   def manyToManyRelation[L,R](l: Table[L], r: Table[R])(implicit kedL: KeyedEntityDef[L,_], kedR: KeyedEntityDef[R,_]) = 
     new ManyToManyRelationBuilder(l,r,None, kedL, kedR)
@@ -490,14 +419,14 @@ trait QueryDsl
     val rightForeignKeyDeclaration =
       schema._createForeignKeyDeclaration(rightFkFmd.columnName, rightPkFmd.columnName)
     
-    private def _associate[T](o: T, m2m: ManyToMany[T,A]): A = {
+    private def _associate[T](o: T, m2m: ManyToMany[T,A])(implicit cs: Session): A = {
       val aInst = m2m.assign(o)
       try {
-        thisTableOfA.insertOrUpdate(aInst)(kedA)
+        thisTableOfA.insertOrUpdate(aInst)(kedA, cs)
       }
       catch {
         case e:SQLException =>
-          if(Session.currentSession.databaseAdapter.isNotNullConstraintViolation(e))
+          if(cs.databaseAdapter.isNotNullConstraintViolation(e))
             throw new RuntimeException(
               "the " + 'associate + " method created and inserted association object of type " +
               posoMetaData.clasz.getName + " that has NOT NULL colums, plase use the other signature of " + 'ManyToMany +
@@ -535,28 +464,28 @@ trait QueryDsl
             outerQueryDsl.where(matchClause._1 and matchClause._2).select((r,a))
           })
 
-        def assign(o: R, a: A) = {
+        def assign(o: R, a: A)(implicit cs: Session) = {
           _assignKeys(o, a.asInstanceOf[AnyRef])
           a
         }
         
-        def associate(o: R, a: A): A  = {
+        def associate(o: R, a: A)(implicit cs: Session): A  = {
           assign(o, a)
-          thisTableOfA.insertOrUpdate(a)(kedA)
+          thisTableOfA.insertOrUpdate(a)(kedA, cs)
           a
         }
 
-        def assign(o: R): A = {
+        def assign(o: R)(implicit cs: Session): A = {
           val aInstAny = thisTableOfA._createInstanceOfRowObject
           val aInst = aInstAny.asInstanceOf[A]
           _assignKeys(o, aInstAny)
           aInst
         }
 
-        def associate(o: R): A =
+        def associate(o: R)(implicit cs: Session): A =
           _associate(o,this)
 
-        def dissociate(o: R) =
+        def dissociate(o: R)(implicit cs: Session) =
           thisTableOfA.deleteWhere(a0 => _whereClauseForAssociations(a0) and _equalityForRightSide(a0, o)) > 0
 
         def _whereClauseForAssociations(a0: A) = {
@@ -571,11 +500,11 @@ trait QueryDsl
           FieldReferenceLinker.createEqualityExpressionWithLastAccessedFieldReferenceAndConstant(rightPk)
         }
 
-        def dissociateAll = 
+        def dissociateAll(implicit cs: Session) =
           thisTableOfA.deleteWhere(a0 => _whereClauseForAssociations(a0))
 
         def associations =
-          thisTableOfA.where(a0 => _whereClauseForAssociations(a0))                  
+          thisTableOfA.where(a0 => _whereClauseForAssociations(a0))
       }
     }
 
@@ -605,28 +534,28 @@ trait QueryDsl
              outerQueryDsl.where(matchClause._1 and matchClause._2).select((l, a))
           })
 
-        def assign(o: L, a: A) = {
+        def assign(o: L, a: A)(implicit cs: Session) = {
           _assignKeys(o, a.asInstanceOf[AnyRef])
           a
         }
         
-        def associate(o: L, a: A): A = {
+        def associate(o: L, a: A)(implicit cs: Session): A = {
           assign(o, a)
-          thisTableOfA.insertOrUpdate(a)(kedA)
+          thisTableOfA.insertOrUpdate(a)(kedA, cs)
           a
         }
 
-        def assign(o: L): A = {
+        def assign(o: L)(implicit cs: Session): A = {
           val aInstAny = thisTableOfA._createInstanceOfRowObject
           val aInst = aInstAny.asInstanceOf[A]
           _assignKeys(o, aInstAny)
           aInst
         }
 
-        def associate(o: L): A =
+        def associate(o: L)(implicit cs: Session): A =
           _associate(o,this)
 
-        def dissociate(o: L) =
+        def dissociate(o: L)(implicit cs: Session) =
           thisTableOfA.deleteWhere(a0 => _whereClauseForAssociations(a0) and _leftEquality(o, a0)) > 0
 
         def _leftEquality(l: L, a0: A) = {
@@ -641,7 +570,7 @@ trait QueryDsl
           FieldReferenceLinker.createEqualityExpressionWithLastAccessedFieldReferenceAndConstant(rightPk)
         }
 
-        def dissociateAll =
+        def dissociateAll(implicit cs: Session) =
           thisTableOfA.deleteWhere(a0 => _whereClauseForAssociations(a0))
 
         def associations =
@@ -699,10 +628,10 @@ trait QueryDsl
 
       new DelegateQuery(q) with OneToMany[M] {
 
-        def deleteAll =
+        def deleteAll(implicit cs: Session) =
           rightTable.deleteWhere(m => f(leftSide, m))
 
-        def assign(m: M) = {
+        def assign(m: M)(implicit cs: Session) = {
           val m0 = m.asInstanceOf[AnyRef]
           val l0 = leftSide.asInstanceOf[AnyRef]
           
@@ -711,9 +640,9 @@ trait QueryDsl
           m
         }
 
-        def associate(m: M) = {
+        def associate(m: M)(implicit cs: Session) = {
           assign(m)
-          rightTable.insertOrUpdate(m)(kedM)
+          rightTable.insertOrUpdate(m)(kedM, cs)
         }
       }
     }
@@ -724,7 +653,7 @@ trait QueryDsl
 
       new DelegateQuery(q) with ManyToOne[O] {
 
-        def assign(one: O) = {
+        def assign(one: O)(implicit cs: Session) = {
           val o = one.asInstanceOf[AnyRef]
           val r = rightSide.asInstanceOf[AnyRef]
 
@@ -733,7 +662,7 @@ trait QueryDsl
           one
         }
 
-        def delete =
+        def delete(implicit cs: Session) =
           leftTable.deleteWhere(o => f(o, rightSide)) > 0
       }
     }

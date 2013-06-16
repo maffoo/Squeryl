@@ -1,7 +1,7 @@
 package org.squeryl.framework
 
 import org.scalatest.matchers.ShouldMatchers
-import org.squeryl.{SessionFactory, Session, Schema}
+import org.squeryl.{Session, Schema}
 
 import org.squeryl.PrimitiveTypeMode._
 import org.scalatest._
@@ -11,56 +11,60 @@ abstract class SchemaTester extends DbTestBase{
 
   def schema : Schema
 
-  def prePopulate() = {}
+  def prePopulate(implicit cs: Session) = {}
 
-  override def beforeAll(){
+  override def beforeAll() {
     super.beforeAll
-    if(notIgnored){
-      transaction{
-         schema.drop
-         schema.create
-        try{
-          prePopulate
-        }catch{
-          case e : Exception =>
-            println(e.getMessage)
-            println(e.getStackTraceString)
+    if (notIgnored) {
+      using(newSession()) { implicit session =>
+        inTransaction {
+          schema.drop
+          schema.create
+          try {
+            prePopulate
+          } catch {
+            case e : Exception =>
+              println(e.getMessage)
+              println(e.getStackTraceString)
+          }
         }
       }
     }
   }
 
-  override def afterAll(){
+  override def afterAll() {
     super.afterAll
-    if(notIgnored){
-      transaction{
-         schema.drop
+    if (notIgnored) {
+      using(newSession()) { implicit session =>
+        transaction {
+          schema.drop
+        }
       }
     }
   }
 }
 
-abstract class DbTestBase extends FunSuite with ShouldMatchers with BeforeAndAfterAll with BeforeAndAfterEach {
+abstract class DbTestBase extends fixture.FunSuite with ShouldMatchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   def connectToDb : Option[() => Session]
 
-  var notIgnored = true
+  private var sessionFactory: Option[() => Session] = None
+  def notIgnored = sessionFactory.isDefined
+  def newSession() = sessionFactory.get()
 
   val ignoredTests : List[String] = Nil
 
-  override def beforeAll(){
-    super.beforeAll
-    SessionFactory.concreteFactory = connectWrapper()
+  type FixtureParam = Session
+
+  def withFixture(test: OneArgTest) {
+    using(newSession()) { session =>
+      test(session)
+    }
   }
 
-  private def connectWrapper() : Option[() => Session] = {
-    val connector = connectToDb
-    if(connector.isEmpty){
-      notIgnored = false
-      None
-    }else{
-      Some(connector.get)
-    }
+  override def beforeAll() {
+    super.beforeAll
+    sessionFactory = connectToDb
   }
 
   override def runTest(
@@ -70,7 +74,7 @@ abstract class DbTestBase extends FunSuite with ShouldMatchers with BeforeAndAft
     configMap: Map[String, Any],
     tracker: Tracker): Unit = {
 
-    if(!notIgnored || ignoredTests.find(_ == testName).isDefined){
+    if (!notIgnored || ignoredTests.find(_ == testName).isDefined) {
       //reporter(TestIgnored(new Ordinal(0), suiteName, Some(this.getClass.getName),testName))
       return
     }

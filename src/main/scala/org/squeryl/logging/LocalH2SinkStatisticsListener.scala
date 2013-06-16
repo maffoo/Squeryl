@@ -6,13 +6,13 @@ import org.squeryl.PrimitiveTypeMode._
 
 object LocalH2SinkStatisticsListener {
 
-  def initializeOverwrite(schemaName: String, workingDir: String = ".") =
+  def initializeOverwrite(schemaName: String, workingDir: String = ".")(implicit cs: Session) =
     initialize(schemaName, true, workingDir)
 
-  def initializeAppend(schemaName: String, workingDir: String = ".") =
+  def initializeAppend(schemaName: String, workingDir: String = ".")(implicit cs: Session) =
     initialize(schemaName, false, workingDir)
 
-  def initialize(schemaName: String, overwrite: Boolean, workingDir: String) = {
+  def initialize(schemaName: String, overwrite: Boolean, workingDir: String)(implicit cs: Session) = {
     Class.forName("org.h2.Driver");
 
     val file = new java.io.File(workingDir, schemaName + ".h2.db").getCanonicalFile
@@ -26,7 +26,7 @@ object LocalH2SinkStatisticsListener {
       new H2Adapter)
 
     if((!file.exists) || overwrite)
-      using(s) {
+      inTransaction {
         StatsSchema.create
       }
       
@@ -44,7 +44,6 @@ class LocalH2SinkStatisticsListener(val h2Session: Session) extends StatisticsLi
   private val _worker = new Thread {
 
     override def run() {
-      h2Session.bindToCurrentThread
       while(!_closed) {
         val op = _queue.take
         op()
@@ -64,16 +63,16 @@ class LocalH2SinkStatisticsListener(val h2Session: Session) extends StatisticsLi
       throw new IllegalStateException('LocalH2SinkStatisticsListener + " has been shutdown.")
 
   def generateStatSummary(staticHtmlFile: java.io.File, n: Int) = _pushOp {
-    BarChartRenderer.generateStatSummary(staticHtmlFile, n)
+    BarChartRenderer.generateStatSummary(staticHtmlFile, n)(h2Session)
   }
 
   def queryExecuted(se: StatementInvocationEvent) =_pushOp {
-    StatsSchema.recordStatementInvocation(se)
+    StatsSchema.recordStatementInvocation(se)(h2Session)
     h2Session.connection.commit
   }
 
   def resultSetIterationEnded(invocationId: String, iterationEndTime: Long, rowCount: Int, iterationCompleted: Boolean) = _pushOp {
-    StatsSchema.recordEndOfIteration(invocationId, iterationEndTime: Long, rowCount: Int, iterationCompleted: Boolean)
+    StatsSchema.recordEndOfIteration(invocationId, iterationEndTime: Long, rowCount: Int, iterationCompleted: Boolean)(h2Session)
     h2Session.connection.commit
   }
 

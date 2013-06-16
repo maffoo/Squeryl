@@ -1,5 +1,6 @@
 package org.squeryl.test
 
+import org.squeryl.Session
 import org.squeryl.framework._
 
 abstract class LeftJoinTest extends SchemaTester with RunTestsInsideTransaction{
@@ -10,7 +11,7 @@ abstract class LeftJoinTest extends SchemaTester with RunTestsInsideTransaction{
 
  import LeftJoinSchema._
 
- override def prePopulate {
+ override def prePopulate(implicit cs: Session) {
 
    months.insert(new Month(1, "Jan"))
    months.insert(new Month(2, "Feb"))
@@ -32,7 +33,7 @@ abstract class LeftJoinTest extends SchemaTester with RunTestsInsideTransaction{
    ordrs.insert(new Ordr(3, 5, 1, 15))
  }
 
- test("return the correct results if an inner join is used"){
+ test("return the correct results if an inner join is used"){ implicit session =>
      val subquery = from(ordrs)((o) =>
        groupBy(o.monthId)
          compute (sum(o.qty))
@@ -48,7 +49,7 @@ abstract class LeftJoinTest extends SchemaTester with RunTestsInsideTransaction{
      res(0)._2 should equal(Some(60))
      res(1)._2 should equal(Some(15))
    }
-   test("return the correct results if a left outer join is used"){
+   test("return the correct results if a left outer join is used"){ implicit session =>
      val subquery = from(ordrs)((o) =>
        groupBy(o.monthId)
          compute (sum(o.qty))
@@ -86,7 +87,7 @@ abstract class LeftJoinTest extends SchemaTester with RunTestsInsideTransaction{
 }
 
 
-import org.squeryl.Schema
+import org.squeryl.{Schema, Session}
 import org.squeryl.PrimitiveTypeMode._
 
 object LeftJoinSchema extends Schema {
@@ -97,7 +98,7 @@ object LeftJoinSchema extends Schema {
 
  val ordrs = table[Ordr]("Ordr")
 
- override def drop = super.drop
+ override def drop(implicit cs: Session) = super.drop
 }
 
 class Item(val id: Int, val name: String)

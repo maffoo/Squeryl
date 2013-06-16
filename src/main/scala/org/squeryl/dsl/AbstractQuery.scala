@@ -123,11 +123,11 @@ abstract class AbstractQuery[R](val isRoot:Boolean) extends Query[R] {
 
   def dumpAst = ast.dumpAst
 
-  def statement: String = _genStatement(true)
+  def statement(implicit cs: Session): String = _genStatement(true)
 
-  private def _genStatement(forDisplay: Boolean) = {
+  private def _genStatement(forDisplay: Boolean)(implicit cs: Session) = {
 
-    val sw = new StatementWriter(forDisplay, Session.currentSession.databaseAdapter)
+    val sw = new StatementWriter(forDisplay, cs.databaseAdapter)
     ast.write(sw)
     sw.statement
   }
@@ -150,13 +150,12 @@ abstract class AbstractQuery[R](val isRoot:Boolean) extends Query[R] {
     c    
   }
 
-  private def _dbAdapter = Session.currentSession.databaseAdapter
+  private def _dbAdapter(implicit cs: Session) = cs.databaseAdapter
 
-  def iterator = new Iterator[R] with Closeable {
+  def iterator(implicit s: Session) = new Iterator[R] with Closeable {
 
     val sw = new StatementWriter(false, _dbAdapter)
     ast.write(sw)
-    val s = Session.currentSession
     val beforeQueryExecute = System.currentTimeMillis
     val (rs, stmt) = _dbAdapter.executeQuery(s, sw)
 
@@ -214,7 +213,7 @@ abstract class AbstractQuery[R](val isRoot:Boolean) extends Query[R] {
     }
   }
 
-  override def toString = dumpAst + "\n" + _genStatement(true)
+  override def toString = dumpAst //+ "\n" + _genStatement(true) // XXX: can only gen statement with session
 
   protected def createSubQueryable[U](q: Queryable[U]): SubQueryable[U] =
     if(q.isInstanceOf[View[_]]) {

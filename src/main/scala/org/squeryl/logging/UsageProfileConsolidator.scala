@@ -41,7 +41,7 @@ object UsageProfileConsolidator {
         java.sql.DriverManager.getConnection("jdbc:h2:" + dst.head.getAbsolutePath, "sa", ""),
         new H2Adapter)
 
-      using(dstDb) {
+      using(dstDb) { implicit session =>
         for(src_i <- src) {
 
           val srcDb_i = new Session(
@@ -49,7 +49,7 @@ object UsageProfileConsolidator {
             new H2Adapter)
 
           val (invocations, statements) =
-            using(srcDb_i) {
+            using(srcDb_i) { implicit session =>
               (StatsSchema.statementInvocations.allRows, StatsSchema.statements.allRows)
             }
 

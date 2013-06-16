@@ -15,13 +15,15 @@
  ***************************************************************************** */
 package org.squeryl.dsl.ast
 
+import org.squeryl.Session
+
 trait QueryExpressionElements extends ExpressionNode {
 
   var inhibitAliasOnSelectElementReference = false
 
   def isChild(q: QueryableExpressionNode): Boolean
 
-  def alias: String
+  def alias(implicit cs: Session): String
 
   def selectDistinct: Boolean
 

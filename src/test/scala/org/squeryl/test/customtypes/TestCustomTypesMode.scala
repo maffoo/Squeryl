@@ -16,7 +16,7 @@ package org.squeryl.test.customtypes
  * limitations under the License.
  ***************************************************************************** */
 import java.sql.SQLException
-import org.squeryl.{KeyedEntity, Schema}
+import org.squeryl.{KeyedEntity, Schema, Session}
 import org.squeryl.framework._
 import org.squeryl.customtypes._
 
@@ -31,7 +31,7 @@ abstract class TestCustomTypesMode extends SchemaTester with QueryTester with Ru
 
   var sharedTestObjects : TestData = null
 
-  override def prePopulate(){
+  override def prePopulate(implicit cs: Session){
     sharedTestObjects = new TestData(schema)
   }
 
@@ -44,7 +44,7 @@ abstract class TestCustomTypesMode extends SchemaTester with QueryTester with Ru
       select(p)
     )
 
-  test("Queries"){
+  test("Queries"){ implicit session =>
     val testObjects = sharedTestObjects; import testObjects._
 
     validateQuery('simpleSelect, simpleSelect, (p:Patient)=>p.id.value, List(joseCuervo.id.value))
@@ -53,7 +53,7 @@ abstract class TestCustomTypesMode extends SchemaTester with QueryTester with Ru
     validateQuery('simpleSelect3, patients.where(_.age < Some(new Age(40))), (p:Patient)=>p.id.value, List(raoulEspinoza.id.value))
   }
 
-  test("OneToMany"){
+  test("OneToMany"){ implicit session =>
     val testObjects = sharedTestObjects; import testObjects._
 
     val jose = patients.where(_.age > 70).single
@@ -70,7 +70,7 @@ abstract class TestCustomTypesMode extends SchemaTester with QueryTester with Ru
   }
 }
 
-class TestData(schema : HospitalDb){
+class TestData(schema : HospitalDb)(implicit cs: Session) {
   val joseCuervo = schema.patients.insert(new Patient(new FirstName("Jose"), Some(new Age(76)), Some(new WeightInKilograms(290.134))))
   val raoulEspinoza = schema.patients.insert(new Patient(new FirstName("Raoul"), Some(new Age(32)), None))
 }
@@ -87,7 +87,7 @@ class HospitalDb extends Schema {
       oneToManyRelation(patients, patientInfo).
       via((p,pi) => p.id === pi.patientId)
   
-  override def drop = super.drop
+  override def drop(implicit cs: Session) = super.drop
 }
 
 class Patient(var firstName: FirstName, var age: Option[Age], var weight: Option[WeightInKilograms]) extends KeyedEntity[IntField] {

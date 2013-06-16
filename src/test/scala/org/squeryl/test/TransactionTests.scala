@@ -12,7 +12,7 @@ class Foo(val value: String) extends KeyedEntity[Long] {
 object FooSchema extends Schema {
   val foos = table[Foo]
 
-  def reset() = {
+  def reset(implicit cs: Session) = {
     drop // its protected for some reason
     create
   }
@@ -25,20 +25,20 @@ abstract class TransactionTests extends DbTestBase{
     return 1
   }
 
-  def doSomething(except: Boolean) : Int = {
-    transaction{
+  def doSomething(except: Boolean)(implicit cs: Session) : Int = {
+    transaction {
       throwExc(except)
     }
   }
   
-  def returnInTransaction: Int =  
+  def returnInTransaction(implicit cs: Session): Int =
     transaction {
       val foo1 = FooSchema.foos.insert(new Foo("test"))
       return 1
     }
 
 
-  test("No exception in transaction"){
+  test("No exception in transaction"){ implicit session =>
     transaction {
       FooSchema.reset
     }
@@ -58,7 +58,7 @@ abstract class TransactionTests extends DbTestBase{
     }
   }
 
-  test("Returning in transaction"){
+  test("Returning in transaction"){ implicit session =>
     transaction {
       FooSchema.reset
     }
@@ -72,7 +72,7 @@ abstract class TransactionTests extends DbTestBase{
     }
   }
 
-  test("Returning out of transaction"){
+  test("Returning out of transaction"){ implicit session =>
     transaction {
       FooSchema.reset
     }
@@ -82,18 +82,18 @@ abstract class TransactionTests extends DbTestBase{
 
       doSomething(false)
     }
-    transaction{
+    transaction {
       // works!
       assert(FooSchema.foos.where(f => f.value === "test").size == 1)//should equal(1)
     }
   }
   
-  test("Returning inside transaction block"){
+  test("Returning inside transaction block"){ implicit session =>
     transaction {
       FooSchema.reset
     }
     returnInTransaction
-    transaction{
+    transaction {
       // works!
       assert(FooSchema.foos.where(f => f.value === "test").size == 1)//should equal(1)
     }

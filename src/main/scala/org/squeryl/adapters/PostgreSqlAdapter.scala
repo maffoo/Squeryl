@@ -44,7 +44,7 @@ class PostgreSqlAdapter extends DatabaseAdapter {
   override def foreignKeyConstraintName(foreignKeyTable: Table[_], idWithinSchema: Int) =
     foreignKeyTable.name + "FK" + idWithinSchema
 
-  override def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit]) = {
+  override def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit])(implicit cs: Session) = {
 
     val autoIncrementedFields = t.posoMetaData.fieldsMetaData.filter(_.isAutoIncremented)
 
@@ -53,7 +53,7 @@ class PostgreSqlAdapter extends DatabaseAdapter {
       sw.write("create sequence ", quoteName(fmd.sequenceName))
 
       if(printSinkWhenWriteOnlyMode == None) {
-        val st = Session.currentSession.connection.createStatement
+        val st = cs.connection.createStatement
         st.execute(sw.statement)
       }
       else
@@ -80,10 +80,10 @@ class PostgreSqlAdapter extends DatabaseAdapter {
       super.createSequenceName(fmd)
     }
 
-  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter) =
+  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter)(implicit cs: Session) =
     sw.writeNodesWithSeparator(fn.args, " || ", false)
   
-  override def writeInsert[T](o: T, t: Table[T], sw: StatementWriter): Unit = {
+  override def writeInsert[T](o: T, t: Table[T], sw: StatementWriter)(implicit cs: Session): Unit = {
 
     val o_ = o.asInstanceOf[AnyRef]
 
@@ -130,7 +130,7 @@ class PostgreSqlAdapter extends DatabaseAdapter {
 
   override def failureOfStatementRequiresRollback = true
   
-  override def postDropTable(t: Table[_]) = {
+  override def postDropTable(t: Table[_])(implicit cs: Session) = {
     
     val autoIncrementedFields = t.posoMetaData.fieldsMetaData.filter(_.isAutoIncremented)
 

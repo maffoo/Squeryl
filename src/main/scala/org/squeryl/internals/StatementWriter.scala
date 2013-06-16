@@ -15,6 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.internals
 
+import org.squeryl.Session
 import org.squeryl.dsl.ast.{ExpressionNode}
 import collection.mutable.{HashSet, HashMap, ArrayBuffer}
 
@@ -130,7 +131,7 @@ class StatementWriter(val isForDisplay: Boolean, val databaseAdapter: DatabaseAd
     }
   }
 
-  def writeNodesWithSeparator(s: Iterable[ExpressionNode], separator: String, newLineAfterSeparator: Boolean) = {
+  def writeNodesWithSeparator(s: Iterable[ExpressionNode], separator: String, newLineAfterSeparator: Boolean)(implicit cs: Session) = {
     val size = s.size
     var c = 1
     for(n <- s) {

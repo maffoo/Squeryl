@@ -15,6 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.dsl.ast
 
+import org.squeryl.Session
 import org.squeryl.internals.StatementWriter
 
 class UpdateStatement(_whereClause: Option[()=>LogicalBoolean], uas: Seq[UpdateAssignment])
@@ -25,7 +26,7 @@ class UpdateStatement(_whereClause: Option[()=>LogicalBoolean], uas: Seq[UpdateA
 
   override def children = whereClause.toList
 
-  def doWrite(sw: StatementWriter) = {}
+  def doWrite(sw: StatementWriter)(implicit cs: Session) = {}
 
   def columns =
     uas.map(ua => ua.left)

@@ -20,10 +20,10 @@ trait QueryTester { self : ShouldMatchers =>
     validateFirstAndExit = 0
   }
 
-  def loggerOn =
-    Session.currentSession.setLogger((s:String) => println(s))
+  def loggerOn(implicit cs: Session) =
+    cs.setLogger((s:String) => println(s))
 
-  def log(queryName: Symbol, query:Query[_]) = {
+  def log(queryName: Symbol, query:Query[_])(implicit cs: Session) = {
 
     println(queryName + " :")
     println(query)
@@ -39,10 +39,10 @@ trait QueryTester { self : ShouldMatchers =>
     actual should equal(expected)
   }
 
-  def validateQuery[R,S](name: Symbol, q:Query[R], mapFunc: R=>S, expected: List[S]): Unit =
+  def validateQuery[R,S](name: Symbol, q:Query[R], mapFunc: R=>S, expected: List[S])(implicit cs: Session): Unit =
     validateQuery[R,S](logQueries, name, q, mapFunc, expected)
 
-  def validateQuery[R,S](logFirst: Boolean, name: Symbol, q:Query[R], mapFunc: R=>S, expected: List[S]): Unit = {
+  def validateQuery[R,S](logFirst: Boolean, name: Symbol, q:Query[R], mapFunc: R=>S, expected: List[S])(implicit cs: Session): Unit = {
 
     if(validateFirstAndExit >= 1)
       return

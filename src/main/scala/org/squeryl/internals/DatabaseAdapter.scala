@@ -42,10 +42,10 @@ trait DatabaseAdapter {
 
   implicit def zipIterable[T](i: Iterable[T]) = new ZipIterable(i)
 
-  def writeQuery(qen: QueryExpressionElements, sw: StatementWriter):Unit =
+  def writeQuery(qen: QueryExpressionElements, sw: StatementWriter)(implicit cs: Session):Unit =
     writeQuery(qen, sw, false, None)
 
-  protected def writeQuery(qen: QueryExpressionElements, sw: StatementWriter, inverseOrderBy: Boolean, topHint: Option[String]):Unit = {
+  protected def writeQuery(qen: QueryExpressionElements, sw: StatementWriter, inverseOrderBy: Boolean, topHint: Option[String])(implicit cs: Session):Unit = {
 
     sw.write("Select")
 
@@ -156,7 +156,7 @@ trait DatabaseAdapter {
     })
 
 
-  def writeJoin(queryableExpressionNode: QueryableExpressionNode, sw: StatementWriter) = {
+  def writeJoin(queryableExpressionNode: QueryableExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     sw.write(queryableExpressionNode.joinKind.get._1)
     sw.write(" ")
     sw.write(queryableExpressionNode.joinKind.get._2)
@@ -306,8 +306,7 @@ trait DatabaseAdapter {
    * For example dropTable will silence when isTableDoesNotExistException(theExceptionThrown).
    * It must be used carefully, and an exception should not be silenced unless identified.
    */
-  protected def execFailSafeExecute(sw: StatementWriter, silenceException: SQLException => Boolean): Unit = {
-    val s = Session.currentSession
+  protected def execFailSafeExecute(sw: StatementWriter, silenceException: SQLException => Boolean)(implicit s: Session): Unit = {
     val c = s.connection
     val stat = c.createStatement
     val sp =
@@ -378,7 +377,7 @@ trait DatabaseAdapter {
 
   protected def getInsertableFields(fmd : Iterable[FieldMetaData]) = fmd.filter(fmd => !fmd.isAutoIncremented && fmd.isInsertable )
 
-  def writeInsert[T](o: T, t: Table[T], sw: StatementWriter):Unit = {
+  def writeInsert[T](o: T, t: Table[T], sw: StatementWriter)(implicit cs: Session):Unit = {
 
     val o_ = o.asInstanceOf[AnyRef]    
     val f = getInsertableFields(t.posoMetaData.fieldsMetaData)
@@ -449,14 +448,14 @@ trait DatabaseAdapter {
   /**
    * When @arg printSinkWhenWriteOnlyMode is not None, the adapter will not execute any statement, but only silently give it to the String=>Unit closure
    */
-  def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit]) = {}
+  def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit])(implicit cs: Session) = {}
   
-  def postDropTable(t: Table[_]) = {}
+  def postDropTable(t: Table[_])(implicit cs: Session) = {}
 
   def createSequenceName(fmd: FieldMetaData) = 
     "s_" + fmd.parentMetaData.viewOrTable.name + "_" + fmd.columnName
 
-  def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter) = {
+  def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter)(implicit cs: Session) = {
     sw.write(fn.name)
     sw.write("(")
     sw.writeNodesWithSeparator(fn.args, ",", false)
@@ -512,7 +511,7 @@ trait DatabaseAdapter {
       })
   }
 
-  def writeDelete[T](t: Table[T], whereClause: Option[ExpressionNode], sw: StatementWriter) = {
+  def writeDelete[T](t: Table[T], whereClause: Option[ExpressionNode], sw: StatementWriter)(implicit cs: Session) = {
 
     sw.write("delete from ")
     sw.write(quoteName(t.prefixedName))
@@ -544,7 +543,7 @@ trait DatabaseAdapter {
   def convertToUuidForJdbc(rs: ResultSet, i:Int): UUID =
     UUID.fromString(rs.getString(i))
 
-  def writeUpdate(t: Table[_], us: UpdateStatement, sw : StatementWriter) = {
+  def writeUpdate(t: Table[_], us: UpdateStatement, sw : StatementWriter)(implicit cs: Session) = {
 
     val colsToUpdate = us.columns.iterator
 
@@ -590,7 +589,7 @@ trait DatabaseAdapter {
 
   def nvlToken = "coalesce"
 
-  def writeNvlCall(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter) = {
+  def writeNvlCall(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     sw.write(nvlToken)
     sw.write("(")
     left.write(sw)
@@ -648,14 +647,11 @@ trait DatabaseAdapter {
     sb.toString
   }
 
-  protected def currenSession =
-    Session.currentSession
-
   def writeDropForeignKeyStatement(foreignKeyTable: Table[_], fkName: String) =
     "alter table " + quoteName(foreignKeyTable.prefixedName) + " drop constraint " + quoteName(fkName)
 
   def dropForeignKeyStatement(foreignKeyTable: Table[_], fkName: String, session: Session):Unit =
-    execFailSafeExecute(writeDropForeignKeyStatement(foreignKeyTable, fkName), e => true)
+    execFailSafeExecute(writeDropForeignKeyStatement(foreignKeyTable, fkName), e => true)(session)
 
   def isTableDoesNotExistException(e: SQLException): Boolean
 
@@ -664,7 +660,7 @@ trait DatabaseAdapter {
   def writeDropTable(tableName: String) =
     "drop table " + quoteName(tableName)
 
-  def dropTable(t: Table[_]) =
+  def dropTable(t: Table[_])(implicit cs: Session) =
     execFailSafeExecute(writeDropTable(t.prefixedName), e=> isTableDoesNotExistException(e))
 
   def writeCompositePrimaryKeyConstraint(t: Table[_], cols: Iterable[FieldMetaData]) = 
@@ -685,14 +681,14 @@ trait DatabaseAdapter {
   }
 
 
-  def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter) = {
+  def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter)(implicit cs: Session) = {
     sw.write("(")
     left.write(sw)
     sw.write(" ~ ?)")
     sw.addParam(pattern)
   }
 
-  def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter) = {
+  def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     val binaryOpNode = new BinaryOperatorNode(left, right, "||")
     binaryOpNode.doWrite(sw)
   }
@@ -750,13 +746,13 @@ trait DatabaseAdapter {
 
   def quoteName(s: String) = s.split('.').map(quoteIdentifier(_)).mkString(".")
 
-  def fieldAlias(n: QueryableExpressionNode, fse: FieldSelectElement) =
+  def fieldAlias(n: QueryableExpressionNode, fse: FieldSelectElement)(implicit cs: Session) =
     n.alias + "_" + fse.fieldMetaData.columnName
 
-  def aliasExport(parentOfTarget: QueryableExpressionNode, target: SelectElement) =
+  def aliasExport(parentOfTarget: QueryableExpressionNode, target: SelectElement)(implicit cs: Session) =
     parentOfTarget.alias + "_" + target.aliasSegment
 
-  def writeSelectElementAlias(se: SelectElement, sw: StatementWriter) = {
+  def writeSelectElementAlias(se: SelectElement, sw: StatementWriter)(implicit cs: Session) = {
     val a = se.aliasSegment
 //    if(a.length > 30)
 //      org.squeryl.internals.Utils.throwError("Oracle Bust : " + a)

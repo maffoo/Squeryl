@@ -23,10 +23,6 @@ import java.sql.{SQLException, ResultSet, Statement, Connection}
 
 class Session(val connection: Connection, val databaseAdapter: DatabaseAdapter, val statisticsListener: Option[StatisticsListener] = None) {
 
-  def bindToCurrentThread = Session.currentSession = Some(this)
-
-  def unbindFromCurrentThread = Session.currentSession = None
-
   private var _logger: String => Unit = null
 
   def logger_=(f: String => Unit) = _logger = f
@@ -66,74 +62,8 @@ class Session(val connection: Connection, val databaseAdapter: DatabaseAdapter, 
   }
 }
 
-trait SessionFactory {
-  def newSession: Session
-}
-
-object SessionFactory {
-
-  /**
-   * Initializing concreteFactory with a Session creating closure enables the use of
-   * the 'transaction' and 'inTransaction' block functions 
-   */
-  var concreteFactory: Option[()=>Session] = None
-
-  /**
-   * Initializing externalTransactionManagementAdapter with a Session creating closure allows to
-   * execute Squeryl statements *without* the need of using 'transaction' and 'inTransaction'.
-   * The use case for this is to allow Squeryl connection/transactions to be managed by an
-   * external framework. In this case Session.cleanupResources *needs* to be called when connections
-   * are closed, otherwise statement of resultset leaks can occur. 
-   */
-  var externalTransactionManagementAdapter: Option[()=>Option[Session]] = None
-
-  def newSession: Session =
-      concreteFactory.getOrElse(
-        throw new IllegalStateException("org.squeryl.SessionFactory not initialized, SessionFactory.concreteFactory must be assigned a \n"+
-              "function for creating new org.squeryl.Session, before transaction can be used.\n" +
-              "Alternatively SessionFactory.externalTransactionManagementAdapter can initialized, please refer to the documentation.")
-      ).apply        
-}
-
 object Session {
-
-  /**
-   * Note about ThreadLocals: all thread locals should be .removed() before the
-   * transaction ends.
-   * 
-   * Leaving a ThreadLocal inplace after the control returns to the user thread
-   * will pollute the users threads and will cause problems for e.g. Tomcat and
-   * other servlet engines.
-   */
-  private val _currentSessionThreadLocal = new ThreadLocal[Session]
   
   def create(c: Connection, a: DatabaseAdapter) =
-    new Session(c,a)  
-
-  def currentSessionOption: Option[Session] = {
-    Option(_currentSessionThreadLocal.get) orElse {
-      SessionFactory.externalTransactionManagementAdapter flatMap { _.apply() }
-    }
-  }
-
-  def currentSession: Session =
-    if(SessionFactory.externalTransactionManagementAdapter != None) {
-      SessionFactory.externalTransactionManagementAdapter.get.apply getOrElse org.squeryl.internals.Utils.throwError("SessionFactory.externalTransactionManagementAdapter was unable to supply a Session for the current scope")
-    }
-    else currentSessionOption.getOrElse(
-      throw new IllegalStateException("No session is bound to current thread, a session must be created via Session.create \nand bound to the thread via 'work' or 'bindToCurrentThread'\n Usually this error occurs when a statement is executed outside of a transaction/inTrasaction block"))
-
-  def hasCurrentSession =
-    currentSessionOption != None
-
-  def cleanupResources =
-    currentSessionOption foreach (_.cleanup)
-
-  private def currentSession_=(s: Option[Session]) = 
-    if (s == None) {
-      _currentSessionThreadLocal.remove()        
-    } else {
-      _currentSessionThreadLocal.set(s.get)
-    }
-  
+    new Session(c,a)
 }

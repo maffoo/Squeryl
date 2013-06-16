@@ -51,7 +51,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
   private [squeryl] def _addRelation(r: ManyToManyRelation[_,_,_]) =
     _manyToManyRelations.append(r)
 
-  private def _dbAdapter = Session.currentSession.databaseAdapter
+  private def _dbAdapter(implicit cs: Session) = cs.databaseAdapter
 
   /**
    *  @returns a tuple of (Table[_], Table[_], ForeignKeyDeclaration) where
@@ -104,14 +104,14 @@ class Schema(implicit val fieldMapper: FieldMapper) {
   /**
    * Prints the schema to standard output, it is simply : schema.printDdl(println(_))
    */
-  def printDdl: Unit = printDdl(println(_))
+  def printDdl(implicit cs: Session): Unit = printDdl(println(_))
 
-  def printDdl(pw: PrintWriter): Unit = printDdl(pw.println(_))
+  def printDdl(pw: PrintWriter)(implicit cs: Session): Unit = printDdl(pw.println(_))
 
   /**
    * @arg statementHandler is a closure that receives every declaration in the schema.
    */
-  def printDdl(statementHandler: String => Unit): Unit = {
+  def printDdl(statementHandler: String => Unit)(implicit cs: Session): Unit = {
 
     statementHandler("-- table declarations :")
 
@@ -163,13 +163,13 @@ class Schema(implicit val fieldMapper: FieldMapper) {
    * database instances, the method is protected in order to make it a little
    * less 'accessible'
    */
-  def drop: Unit = {
+  def drop(implicit cs: Session): Unit = {
 
     if(_dbAdapter.supportsForeignKeyConstraints)
       _dropForeignKeyConstraints
 
-    val s = Session.currentSession.connection.createStatement
-    val con = Session.currentSession.connection
+    val s = cs.connection.createStatement
+    val con = cs.connection
 
     for(t <- _tables) {
       _dbAdapter.dropTable(t)
@@ -177,7 +177,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     }
   }  
 
-  def create = {
+  def create(implicit cs: Session) = {
     _createTables
     if(_dbAdapter.supportsForeignKeyConstraints)
       _declareForeignKeyConstraints
@@ -187,7 +187,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     createColumnGroupConstraintsAndIndexes
   }
 
-  private def _indexDeclarationsFor(t: Table[_]) = {
+  private def _indexDeclarationsFor(t: Table[_])(implicit cs: Session) = {
     val d0 =
       for(fmd <- t.posoMetaData.fieldsMetaData)
         yield _writeIndexDeclarationIfApplicable(fmd.columnAttributes.toSeq, Seq(fmd), None)
@@ -196,12 +196,12 @@ class Schema(implicit val fieldMapper: FieldMapper) {
   }
   
 
-  private def _writeColumnGroupAttributeAssignments: Seq[String] =
+  private def _writeColumnGroupAttributeAssignments(implicit cs: Session): Seq[String] =
     for(cgaa <- _columnGroupAttributeAssignments)
       yield _writeIndexDeclarationIfApplicable(cgaa.columnAttributes, cgaa.columns, cgaa.name).
         getOrElse(org.squeryl.internals.Utils.throwError("emtpy attribute list should not be possible to create with DSL (Squeryl bug)."))
 
-  private def _writeIndexDeclarationIfApplicable(columnAttributes: Seq[ColumnAttribute], cols: Seq[FieldMetaData], name: Option[String]): Option[String] = {
+  private def _writeIndexDeclarationIfApplicable(columnAttributes: Seq[ColumnAttribute], cols: Seq[FieldMetaData], name: Option[String])(implicit cs: Session): Option[String] = {
 
     val unique = columnAttributes.find(_.isInstanceOf[Unique])
     val indexed = columnAttributes.find(_.isInstanceOf[Indexed]).flatMap{ i => 
@@ -219,13 +219,12 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     }
   }
   
-  def createColumnGroupConstraintsAndIndexes =
+  def createColumnGroupConstraintsAndIndexes(implicit cs: Session) =
     for(statement <- _writeColumnGroupAttributeAssignments)
       _executeDdl(statement)
 
-  private def _dropForeignKeyConstraints = {
+  private def _dropForeignKeyConstraints(implicit cs: Session) = {
 
-    val cs = Session.currentSession
     val dba = cs.databaseAdapter
 
     for(fk <- _activeForeignKeySpecs) {
@@ -234,13 +233,12 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     }
   }
 
-  private def _declareForeignKeyConstraints =
+  private def _declareForeignKeyConstraints(implicit cs: Session) =
     for(fk <- _foreignKeyConstraints)
       _executeDdl(fk)
 
-  private def _executeDdl(statement: String) = {
+  private def _executeDdl(statement: String)(implicit cs: Session) = {
 
-    val cs = Session.currentSession
     cs.log(statement)
 
     val s = cs.connection.createStatement
@@ -255,7 +253,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     }
   }
   
-  private def _foreignKeyConstraints =
+  private def _foreignKeyConstraints(implicit cs: Session) =
     for(fk <- _activeForeignKeySpecs) yield {
       val fkDecl = fk._3
 
@@ -268,7 +266,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
       )
     }
   
-  private def _createTables = {
+  private def _createTables(implicit cs: Session) = {
     for(t <- _tables) {
       val sw = new StatementWriter(_dbAdapter)
       _dbAdapter.writeCreateTable(t, sw, this)
@@ -279,7 +277,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     }
   }
 
-  private def _createConstraintsOfCompositePKs =
+  private def _createConstraintsOfCompositePKs(implicit cs: Session) =
     for(cpk <- _allCompositePrimaryKeys) {
       val createConstraintStmt = _dbAdapter.writeCompositePrimaryKeyConstraint(cpk._1, cpk._2)
       _executeDdl(createConstraintStmt)
@@ -607,7 +605,7 @@ class Schema(implicit val fieldMapper: FieldMapper) {
    */
   class ActiveRecord[A](a: A, queryDsl: QueryDsl, m: Manifest[A]) {
     
-    private def _performAction(action: (Table[A]) => Unit) =
+    private def _performAction(action: (Table[A]) => Unit)(implicit cs: Session) =
       _tableTypes get (m.erasure) map { table: Table[_] =>
         queryDsl inTransaction (action(table.asInstanceOf[Table[A]]))
       }
@@ -615,13 +613,13 @@ class Schema(implicit val fieldMapper: FieldMapper) {
     /**
      * Same as {{{table.insert(a)}}}
      */
-    def save =
+    def save(implicit cs: Session) =
       _performAction(_.insert(a))
 
     /**
      * Same as {{{table.update(a)}}}
      */  
-    def update(implicit ked: KeyedEntityDef[A,_]) =
+    def update(implicit ked: KeyedEntityDef[A,_], cs: Session) =
       _performAction(_.update(a))
       
   }

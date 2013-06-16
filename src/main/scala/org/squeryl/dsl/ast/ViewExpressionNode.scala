@@ -63,8 +63,8 @@ class ViewExpressionNode[U](val view: View[U])
 
   val resultSetMapper = new ResultSetMapper
 
-  def alias =
-    Session.currentSession.databaseAdapter.viewAlias(this)
+  def alias(implicit cs: Session) =
+    cs.databaseAdapter.viewAlias(this)
 
   def owns(aSample: AnyRef) = aSample eq sample.asInstanceOf[AnyRef]
 
@@ -75,7 +75,7 @@ class ViewExpressionNode[U](val view: View[U])
 
   def sample = _sample.get
 
-  def doWrite(sw: StatementWriter) =
+  def doWrite(sw: StatementWriter)(implicit cs: Session) =
       sw.write(sw.quoteName(view.prefixedName))
 
   override def toString = {

@@ -17,6 +17,7 @@ package org.squeryl.logging
 
 import org.squeryl.KeyedEntity
 import org.squeryl.Schema
+import org.squeryl.Session
 import org.squeryl.dsl.CompositeKey2
 import org.squeryl.PrimitiveTypeMode._
 
@@ -80,7 +81,7 @@ object Measure extends Enumeration {
 
 object StatsSchema extends Schema {
 
-  override def drop = super.drop
+  override def drop(implicit cs: Session) = super.drop
 
   val statements = table[Statement]("Statementz")
 
@@ -112,7 +113,7 @@ object StatsSchema extends Schema {
     s.definitionOrCallSite is(dbType("varchar(512)"))
   ))  
 
-  def recordStatementInvocation(sie: StatementInvocationEvent) = {
+  def recordStatementInvocation(sie: StatementInvocationEvent)(implicit cs: Session) = {
 
     val statementK = _lookupOrCreateStatementAndReturnKey(sie)
     val si = new StatementInvocation(sie, statementK.a1, statementK.a2)
@@ -120,7 +121,7 @@ object StatsSchema extends Schema {
     si.id
   }
 
-  def recordEndOfIteration(statementInvocationId: String, iterationEndTime: Long, rowCount: Int, iterationCompleted: Boolean) = {
+  def recordEndOfIteration(statementInvocationId: String, iterationEndTime: Long, rowCount: Int, iterationCompleted: Boolean)(implicit cs: Session) = {
 
     update(statementInvocations)(si =>
       where(si.id === statementInvocationId)
@@ -128,7 +129,7 @@ object StatsSchema extends Schema {
     )
   }
 
-  private def _lookupOrCreateStatementAndReturnKey(se: StatementInvocationEvent) = {
+  private def _lookupOrCreateStatementAndReturnKey(se: StatementInvocationEvent)(implicit cs: Session) = {
 
     val s = new Statement(se.jdbcStatement, se.definitionOrCallSite)
 

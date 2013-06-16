@@ -256,6 +256,6 @@ class YieldValuePusher(val index: Int, val selectElement: SelectElement, mapper:
 
 
   override def toString =
-    "$(" + index + "->&("+selectElement.writeToString+")" +
+    "$(" + index + "->&("+/*selectElement.writeToString+*/")" + // XXX: can only write to string with Session
     (if(mapper.isActive) "*" else "")
 }

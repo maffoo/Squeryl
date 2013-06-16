@@ -18,7 +18,7 @@ package org.squeryl.adapters
 import java.sql.SQLException
 import org.squeryl.internals.{StatementWriter, FieldMetaData, DatabaseAdapter}
 import org.squeryl.dsl.ast._
-import org.squeryl.{Schema}
+import org.squeryl.{Schema, Session}
 
 class MSSQLServer extends DatabaseAdapter {
 
@@ -65,15 +65,15 @@ class MSSQLServer extends DatabaseAdapter {
       sw.pushPendingNextLine
     }
   
-  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter) =
+  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter)(implicit cs: Session) =
     sw.writeNodesWithSeparator(fn.args, " + ", false)
 
-  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter) = {
+  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     val binaryOpNode = new BinaryOperatorNode(left, right, "+")
     binaryOpNode.doWrite(sw)
   }
 
-  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter) = {
+  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter)(implicit cs: Session) = {
     // If you are keen enough you can implement a UDF and subclass this method to call out to it.
     // http://msdn.microsoft.com/en-us/magazine/cc163473.aspx
     throw new UnsupportedOperationException("MSSQL does not yet support a regex function")
@@ -129,7 +129,7 @@ class MSSQLServer extends DatabaseAdapter {
 //      println(sw.statement)
 //    }
 
-  override def writeQuery(qen: QueryExpressionElements, sw: StatementWriter) =
+  override def writeQuery(qen: QueryExpressionElements, sw: StatementWriter)(implicit cs: Session) =
     if(qen.page == None)
       super.writeQuery(qen, sw)
     else {

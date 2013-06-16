@@ -15,6 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.dsl.ast
 
+import org.squeryl.Session
 import org.squeryl.internals._
 import org.squeryl.dsl.{QueryYield, AbstractQuery}
 import scala.collection.mutable.ListBuffer
@@ -96,7 +97,7 @@ class QueryExpressionNode[R](_query: AbstractQuery[R],
 
   def page = _query.page
 
-  def alias = "q" + uniqueId.get
+  def alias(implicit cs: Session) = "q" + uniqueId.get
 
   def getOrCreateAllSelectElements(forScope: QueryExpressionElements): Iterable[SelectElement] = {
     _selectList.map(se => new ExportedSelectElement(se))
@@ -129,7 +130,7 @@ class QueryExpressionNode[R](_query: AbstractQuery[R],
 
   def selectList: Iterable[SelectElement] = _selectList
 
-  def doWrite(sw: StatementWriter) = {
+  def doWrite(sw: StatementWriter)(implicit cs: Session) = {
     val isNotRoot = parent != None
 
     if(isNotRoot) {

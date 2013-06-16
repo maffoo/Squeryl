@@ -32,26 +32,26 @@ class DB2Adapter extends DatabaseAdapter {
 
   override def supportsAutoIncrementInColumnDeclaration: Boolean = false
 
-  override def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit]) = {
+  override def postCreateTable(t: Table[_], printSinkWhenWriteOnlyMode: Option[String => Unit])(implicit cs: Session) = {
 
     val sw = new StatementWriter(false, this)
     sw.write("create sequence ", sequenceName(t), " start with 1 increment by 1 nomaxvalue")
 
     if(printSinkWhenWriteOnlyMode == None) {
-      val st = Session.currentSession.connection.createStatement
+      val st = cs.connection.createStatement
       st.execute(sw.statement)
     }
     else
       printSinkWhenWriteOnlyMode.get.apply(sw.statement + ";")
   }
 
-  override def postDropTable(t: Table[_]) =
+  override def postDropTable(t: Table[_])(implicit cs: Session) =
     execFailSafeExecute("drop sequence " + sequenceName(t), e => e.getErrorCode == -204)
 
   def sequenceName(t: Table[_]) =
     t.prefixedPrefixedName("s_")
 
-  override def writeInsert[T](o: T, t: Table[T], sw: StatementWriter): Unit = {
+  override def writeInsert[T](o: T, t: Table[T], sw: StatementWriter)(implicit cs: Session): Unit = {
 
     val o_ = o.asInstanceOf[AnyRef]
 
@@ -75,7 +75,7 @@ class DB2Adapter extends DatabaseAdapter {
     sw.write(colVals.mkString("(", ",", ")"));
   }
 
-  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter) =
+  override def writeConcatFunctionCall(fn: FunctionNode, sw: StatementWriter)(implicit cs: Session) =
     sw.writeNodesWithSeparator(fn.args, " || ", false)
 
   override def isTableDoesNotExistException(e: SQLException) = {
@@ -84,7 +84,7 @@ class DB2Adapter extends DatabaseAdapter {
 
   override def writePaginatedQueryDeclaration(qen: QueryExpressionElements, sw: StatementWriter) = {}
 
-  override def writeQuery(qen: QueryExpressionElements, sw: StatementWriter) =
+  override def writeQuery(qen: QueryExpressionElements, sw: StatementWriter)(implicit cs: Session) =
     if (qen.page == None)
       super.writeQuery(qen, sw)
     else {
@@ -117,7 +117,7 @@ class DB2Adapter extends DatabaseAdapter {
       }
     }
 
-  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter) = {
+  override def writeConcatOperator(left: ExpressionNode, right: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     sw.write("(")
     _writeConcatOperand(left, sw)
     sw.write(" ")
@@ -127,7 +127,7 @@ class DB2Adapter extends DatabaseAdapter {
     sw.write(")")
   }
 
-  private def _writeConcatOperand(e: ExpressionNode, sw: StatementWriter) = {
+  private def _writeConcatOperand(e: ExpressionNode, sw: StatementWriter)(implicit cs: Session) = {
     if (e.isInstanceOf[ConstantTypedExpression[_,_]]) {
       val c = e.asInstanceOf[ConstantTypedExpression[Any,Any]]
       sw.write("cast(")
@@ -140,7 +140,7 @@ class DB2Adapter extends DatabaseAdapter {
       e.write(sw)
   }
 
-  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter) = {
+  override def writeRegexExpression(left: ExpressionNode, pattern: String, sw: StatementWriter)(implicit cs: Session) = {
     // If you are keen enough you can implement a UDF and subclass this method to call out to it.
     // See http://www.ibm.com/developerworks/data/library/techarticle/0301stolze/0301stolze.html for how.
     throw new UnsupportedOperationException("DB2 does not support a regex scalar function")

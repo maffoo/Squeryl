@@ -31,7 +31,7 @@ case class Artist(val name:String) extends MusicDbObject {
   // this returns a Query[Song] which is also an Iterable[Song] :
   def songs = from(MusicDb.songs)(s => where(s.artistId === id) select(s))
 
-  def newSong(title: String, filePath: Option[String], year: Int) =
+  def newSong(title: String, filePath: Option[String], year: Int)(implicit cs: Session) =
     MusicDb.songs.insert(new Song(title, id, filePath, year))
 }
 
@@ -49,12 +49,12 @@ class Song(val title: String, val artistId: Long, val filePath: Option[String], 
   import MusicDb._
   
   // An alternative (shorter) syntax for single table queries :
-  def artist = artists.where(a => a.id === artistId).single
+  def artist(implicit cs: Session) = artists.where(a => a.id === artistId).single
 
   // Another alternative for lookup by primary key, since Artist is a
   // KeyedEntity[Long], it's table has a lookup[Long](k: Long)
   // method available :
-  def lookupArtist = artists.lookup(artistId)
+  def lookupArtist(implicit cs: Session) = artists.lookup(artistId)
 }
 
 class Playlist(val name: String, val path: String) extends MusicDbObject {
@@ -69,7 +69,7 @@ class Playlist(val name: String, val path: String) extends MusicDbObject {
       orderBy(ple.songNumber asc)
     )
 
-  def addSong(s: Song) = {
+  def addSong(s: Song)(implicit cs: Session) = {
 
     // Note how this query can be implicitly converted to an Int since it returns
     // at most one row, this applies to all single column aggregate queries with no groupBy clause.
@@ -84,10 +84,10 @@ class Playlist(val name: String, val path: String) extends MusicDbObject {
     playlistElements.insert(new PlaylistElement(nextSongNumber, id, s.id))
   }
 
-  def removeSong(song: Song) =
+  def removeSong(song: Song)(implicit cs: Session) =
     playlistElements.deleteWhere(ple => ple.songId === song.id)
 
-  def removeSongOfArtist(artist: Artist) =
+  def removeSongOfArtist(artist: Artist)(implicit cs: Session) =
     playlistElements.deleteWhere(ple =>
       (ple.playlistId === id) and
       (ple.songId in from(songsOf(artist.id))(s => select(s.id)))
@@ -113,7 +113,7 @@ class Playlist(val name: String, val path: String) extends MusicDbObject {
   // Unlike SQL, a function that returns a query can be nested
   // as if it were a query, notice the nesting of 'songsOf'
   // allowing DRY persistence layers as reuse is enhanced.
-  def latestSongFrom(artistId: Long) =
+  def latestSongFrom(artistId: Long)(implicit cs: Session) =
     from(songsOf(artistId))(s =>
       select(s)
       orderBy(s.id desc)
@@ -142,10 +142,10 @@ object MusicDb extends Schema {
   val ratings = table[Rating]
 
   // drop (schema) is normaly protected... for safety, here we live dangerously !
-  override def drop = super.drop
+  override def drop(implicit cs: Session) = super.drop
 }
 
-class TestData{
+class TestData()(implicit cs: Session){
   import MusicDb._
 
   val herbyHancock = artists.insert(new Artist("Herby Hancock"))
@@ -169,12 +169,12 @@ abstract class KickTheTires extends SchemaTester with RunTestsInsideTransaction{
 
   var sharedTestData : TestData = null
 
-  override def prePopulate(){
+  override def prePopulate(implicit cs: Session){
     sharedTestData = new TestData()
   }
 
 
-  test("kick tires") {
+  test("kick tires") { implicit session =>
     val testData = sharedTestData; import testData._
 
     funkAndLatinJazz.addSong(watermelonMan)

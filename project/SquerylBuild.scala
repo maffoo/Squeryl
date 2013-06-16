@@ -77,7 +77,7 @@ object SquerylBuild extends Build {
           	case sv if sv startsWith "2.10" =>
           	    "org.scalatest" % "scalatest_2.10.0-M6" % "1.9-2.10.0-M6-B2" % "test"
           	case sv if sv startsWith "2.9" =>
-          		"org.scalatest" % "scalatest_2.9.2" % "1.6.1" % "test"
+          		"org.scalatest" % "scalatest_2.9.2" % "1.9.1" % "test"
           	case _ =>
           		"org.scalatest" % "scalatest_2.8.2" % "1.5.1" % "test"
         })

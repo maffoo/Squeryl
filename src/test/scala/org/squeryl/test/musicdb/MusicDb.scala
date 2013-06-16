@@ -72,13 +72,13 @@ class MusicDb extends Schema {
 
   val cds = table[Cd]
 
-  override def drop = {
-    Session.cleanupResources
+  override def drop(implicit cs: Session) = {
+    cs.cleanup
     super.drop
   }
 }
 
-class TestData(schema : MusicDb){
+class TestData(schema : MusicDb)(implicit cs: Session){
   import schema._
   val herbyHancock = artists.insert(new Person("Herby", "Hancock", Some(68)))
   val ponchoSanchez = artists.insert(new Person("Poncho", "Sanchez", None, Some(new Timestamp(5))))
@@ -107,7 +107,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
   
   var sharedTestInstance : TestData = null
   
-  override def prePopulate(){
+  override def prePopulate(implicit cs: Session){
     sharedTestInstance = new TestData(schema)
   }
 
@@ -116,7 +116,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       where(a.firstName === "Poncho") select(a)
    )
 
-  test("JoinWithCompute"){
+  test("JoinWithCompute"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     
     val q =
@@ -139,7 +139,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testJoinWithCompute)
   }
 
-  test("OuterJoinWithSubQuery"){
+  test("OuterJoinWithSubQuery"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val artistsQ = artists.where(_.firstName <> "zozo")
@@ -277,17 +277,17 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     assert(actual == expected, ""+s+" failed, got " + actual + " expected " + expected)
 
 
-  private def _innerTx(songId: Long) = inTransaction {
+  private def _innerTx(songId: Long)(implicit cs: Session) = inTransaction {
 
     songs.where(_.id === songId).single
   }
 
-  test("LoopInNestedInTransaction") {
+  test("LoopInNestedInTransaction") { implicit session =>
     inTransaction {
       songsFeaturingPoncho.foreach(s => _innerTx(s.id))
     }
   }
-   test("Queries"){
+   test("Queries"){ implicit session =>
 //  def working = {
 //    val testInstance = sharedTestInstance; import testInstance._
 //
@@ -419,7 +419,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
   }
 
 
-  test("exerciseASTRenderingOfExportSelectElements"){
+  test("exerciseASTRenderingOfExportSelectElements"){ implicit session =>
     val nestedCountCDs = from(from(countCds(cds))(m => select(m)))(m => select(m))
 
     validateQuery('countCds, nestedCountCDs, (m:Measures[Long]) => m.measures, List(2))
@@ -471,7 +471,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
   }
 */
 
-  test("UpperAndLowerFuncs"){
+  test("UpperAndLowerFuncs"){ implicit session =>
     try {
         val q =
           from(artists)(a=>
@@ -495,7 +495,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
   }
 
 
-  test("ConcatFunc"){
+  test("ConcatFunc"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
       val q =
@@ -512,7 +512,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       passed('testConcatFunc)
     }
 
-  test("Timestamp"){
+  test("Timestamp"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var mongo = artists.where(_.firstName === mongoSantaMaria.firstName).single
@@ -547,7 +547,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testTimestamp)
   }
 
-  private def _truncateTimestampInTimeOfLastUpdate(p: Person) = {
+  private def _truncateTimestampInTimeOfLastUpdate(p: Person)(implicit cs: Session) = {
     val t1 = p.timeOfLastUpdate
 
     val cal = Calendar.getInstance
@@ -575,7 +575,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     new Timestamp(cal.getTimeInMillis)
   }
 
-  test("TestTimestampImplicit"){
+  test("TestTimestampImplicit"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val t: Option[Timestamp] =
@@ -584,7 +584,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       )
   }
 
-  ignore("TimestampPartialUpdate"){
+  ignore("TimestampPartialUpdate"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var mongo = artists.where(_.firstName === mongoSantaMaria.firstName).single
@@ -609,14 +609,14 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testTimestampPartialUpdate)
   }
 
-  test("TimestampDownToMillis"){
+  test("TimestampDownToMillis"){ implicit session =>
 
     // Oracle : http://forums.oracle.com/forums/thread.jspa?threadID=239634
     // MySql  : http://bugs.mysql.com/bug.php?id=8523
     // MSSQL  : http://stackoverflow.com/questions/2620627/ms-sql-datetime-precision-problem
     val testInstance = sharedTestInstance; import testInstance._
     
-    val dbAdapter = Session.currentSession.databaseAdapter
+    val dbAdapter = session.databaseAdapter
     if(!dbAdapter.isInstanceOf[MSSQLServer] && !dbAdapter.isInstanceOf[OracleAdapter]) {// FIXME or investigate millisecond handling of each DB:
 
       var mongo = artists.where(_.firstName === mongoSantaMaria.firstName).single
@@ -642,25 +642,25 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     }
   }
 
-  test("nvl followed by >= on Timestamp") {
+  test("nvl followed by >= on Timestamp") { implicit session =>
     val timestamp = new Timestamp(0L)
     from(artists)(a => select(nvl(a.created, new Timestamp(10L)) >= timestamp)).size should be >= 0
   }
   
-  test("validateScalarQuery1") {
+  test("validateScalarQuery1") { implicit session =>
     val cdCount: Long = countCds2(cds)
     assert(cdCount == 2, "exprected 2, got " + cdCount + " from " + countCds2(cds))
 
   }
 
-  test("validateScalarQueryConversion1") {
+  test("validateScalarQueryConversion1") { implicit session =>
     
     val d:Option[Double] = avgSongCountForAllArtists
     //println("d=" + d)
     assert(d.get == 1.0, "expected " + 1.0 +"got "  +d)
   }
 
-  test("Update1"){
+  test("Update1"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var ac = artists.where(a=> a.id === alainCaron.id).single
@@ -671,7 +671,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testUpdate1 )
   }
 
-  test("KeyedEntityImplicitLookup"){
+  test("KeyedEntityImplicitLookup"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var ac = artists.lookup(alainCaron.id).get
@@ -680,7 +680,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testKeyedEntityImplicitLookup)
   }
 
-  test("DeleteVariations"){
+  test("DeleteVariations"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     var artistForDelete = artists.insert(new Person("Delete", "Me", None))
@@ -700,14 +700,14 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testDeleteVariations)
   }
 
-  def inhibitedArtistsInQuery(inhibit: Boolean) =
+  def inhibitedArtistsInQuery(inhibit: Boolean)(implicit cs: Session) =
     from(songs, artists.inhibitWhen(inhibit))((s,a) =>
       where(a.get.firstName === "Poncho" and s.interpretId === a.get.id)
       select(s)
       orderBy(s.title, a.get.id desc)
     )
 
-  test("DynamicQuery1"){
+  test("DynamicQuery1"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val allSongs =
       from(songs)(s =>
@@ -738,7 +738,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       orderBy(s.get.title, a.id desc)
     )
 
-  test("DynamicQuery2"){
+  test("DynamicQuery2"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q = inhibitedSongsInQuery(true)
     //println(q.dumpAst)
@@ -765,7 +765,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testDynamicQuery2)
   }
 
-  test("PaginatedQuery1"){
+  test("PaginatedQuery1"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q = from(artists)(a =>
         select(a)
@@ -789,7 +789,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
   }
 
 
-  private def _betweenArtists(s1: String, s2: String) =
+  private def _betweenArtists(s1: String, s2: String)(implicit cs: Session) =
      from(artists)(a =>
        where(a.firstName between(s1, s2))
        select(a)
@@ -797,7 +797,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
      ).map(a=>a.firstName).toList
 
 
-  test("BetweenOperator"){
+  test("BetweenOperator"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val p1 = _betweenArtists(alainCaron.firstName, herbyHancock.firstName)
     val p2 = _betweenArtists(hossamRamzy.firstName, mongoSantaMaria.firstName)
@@ -830,7 +830,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
 //    }
 //  }
 
-  test("Enums IN"){
+  test("Enums IN"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     val gs = List(Jazz, Rock)
@@ -843,7 +843,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
                  "expected 2 Jazz/Rock pieces")
   }
 
-  test("Enums with groupBy", SingleTestRun){
+  test("Enums with groupBy", SingleTestRun){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     
     
@@ -862,7 +862,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     assert(allKnownSecondaryGenres == Set(None, Some(Genre.Latin)))
   }
   
-  test("Enums Inhibit"){
+  test("Enums Inhibit"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
 
     def listSongs(genreFilter: Option[Genre]) =
@@ -876,7 +876,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     assertEquals(listSongs(None).size, songs.allRows.size, "expected all songs")
   }
   
-  test("Enums"){
+  test("Enums"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val testAssemblaIssue9 =
       from(songs)(s =>
@@ -954,7 +954,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testEnums)
   }
 
-  test("DynamicWhereClause1"){
+  test("DynamicWhereClause1"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val allArtists = artists.allRows
 
@@ -988,7 +988,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       )
 
 // TODO: REFACTOR Z (reintroduce case statements tests) 
-  test("InTautology"){
+  test("InTautology"){ implicit session =>
 
     val q = artists.where(_.firstName in Nil).toList
 
@@ -997,7 +997,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testInTautology)
   }
 
-  test("NotInTautology"){
+  test("NotInTautology"){ implicit session =>
 
    val allArtists = artists.allRows.map(_.id).toSet
 
@@ -1008,7 +1008,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testNotInTautology)
   }
 
-  test("AggregateQueryOnRightHandSideOfInOperator"){
+  test("AggregateQueryOnRightHandSideOfInOperator"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q1 =
       from(cds)(cd =>
@@ -1042,7 +1042,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testAggregateQueryOnRightHandSideOfInOperator)
   }
 
-  test("AggregateComputeInSubQuery"){
+  test("AggregateComputeInSubQuery"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     val q1 =
       from(cds)(cd =>
@@ -1076,7 +1076,7 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     passed('testAggregateComputeInSubQuery)
   }
   
-  test("OptionalOuterJoin"){
+  test("OptionalOuterJoin"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     /*
      * First we'll verify some preconditions Hossam must 
@@ -1113,13 +1113,13 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
     query2.toList.size should be (1)
   }
   
-  test("Inhibit single LogicalBoolean"){
+  test("Inhibit single LogicalBoolean"){ implicit session =>
     from(artists)(a =>
       where((a.age === 1000000).inhibitWhen(true)) select(a)).toList.size should be > (0)
     
   }
   
-  test("Inhibit one side of LogicalBoolean"){
+  test("Inhibit one side of LogicalBoolean"){ implicit session =>
     val testInstance = sharedTestInstance; import testInstance._
     //Left inhibit
     from(artists)(a =>
@@ -1131,13 +1131,13 @@ abstract class MusicDbTestRun extends SchemaTester with QueryTester with RunTest
       select(a)).toList.size should be (1)
   }
   
-  test("Inhibit both sides of LogicalBoolean"){
+  test("Inhibit both sides of LogicalBoolean"){ implicit session =>
     from(artists)(a =>
       where((a.age === 1000000).inhibitWhen(true) and (a.id between (999, 1000)).inhibitWhen(true))
       select(a)).toList.size should be > (0)
   }
   
-  test("Inhibit right hand side of enum"){
+  test("Inhibit right hand side of enum"){ implicit session =>
   }
 //  //class EnumE[A <: Enumeration#Value](val a: A) {
 //  class EnumE[A](val a: A) {
