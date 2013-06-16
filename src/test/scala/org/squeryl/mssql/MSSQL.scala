@@ -3,19 +3,19 @@ package org.squeryl.mssql
 import org.squeryl.test._
 import org.squeryl.adapters.MSSQLServer
 import org.squeryl.framework.DBConnector
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 
 trait MSSQL_Connection extends DBConnector{
-  def connectToDb() : Option[() => Session] = {
+  def connectToDb() : Option[Database] = {
     if(config.hasProps("mssql.connectionString")) {
       Class.forName("net.sourceforge.jtds.jdbc.Driver")
 
-      Some(() => {
+      Some(Database {
         val c = java.sql.DriverManager.getConnection(
           config.getProp("mssql.connectionString")
         )
         c.setAutoCommit(false)
-        Session.create(c, new MSSQLServer)
+        Session(c, new MSSQLServer)
       })
     }else{
       None

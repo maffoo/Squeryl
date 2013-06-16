@@ -75,12 +75,6 @@ trait QueryDsl
     }
   }
 
-  def using[A](s: => Session)(a: Session => A): A = {
-    val session = s
-    session.connection.setAutoCommit(true)
-    try a(session) finally session.close
-  }
-
   /**
    * Run the given block of code within a transaction in the context
    * of the given session. If a transaction is already in progress,

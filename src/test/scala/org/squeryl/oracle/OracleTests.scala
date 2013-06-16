@@ -6,21 +6,21 @@ import org.squeryl.test._
 import org.squeryl.framework.DBConnector
 import org.squeryl.adapters.OracleAdapter
 
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 
 trait Oracle_Connection extends DBConnector{
-  def connectToDb() : Option[() => Session] = {
+  def connectToDb() : Option[Database] = {
     if(config.hasProps("oracle.connectionString", "oracle.user", "oracle.password")){
       Class.forName("oracle.jdbc.OracleDriver")
 
-      Some(() => {
+      Some(Database {
         val c = java.sql.DriverManager.getConnection(
           config.getProp("oracle.connectionString"),
           config.getProp("oracle.user"),
           config.getProp("oracle.password")
         )
         c.setAutoCommit(false)
-        Session.create(c, new OracleAdapter)
+        Session(c, new OracleAdapter)
       })
     }else{
       None

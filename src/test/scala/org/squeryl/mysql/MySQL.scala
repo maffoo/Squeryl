@@ -3,19 +3,19 @@ package org.squeryl.mysql
 import org.squeryl.test._
 import org.squeryl.adapters.MySQLInnoDBAdapter
 import org.squeryl.framework.DBConnector
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 
 trait MySQL_Connection extends DBConnector {
-  def connectToDb() : Option[() => Session] = {
+  def connectToDb() : Option[Database] = {
     if (config.hasProps("mysql.connectionString")) {
       Class.forName("com.mysql.jdbc.Driver")
 
-      Some(() => {
+      Some(Database {
         val c = java.sql.DriverManager.getConnection(
           config.getProp("mysql.connectionString")
         )
         c.setAutoCommit(false)
-        Session.create(c, new MySQLInnoDBAdapter)
+        Session(c, new MySQLInnoDBAdapter)
       })
     } else {
       None

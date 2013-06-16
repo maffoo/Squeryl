@@ -63,7 +63,7 @@ class Session(val connection: Connection, val databaseAdapter: DatabaseAdapter, 
 }
 
 object Session {
-  
-  def create(c: Connection, a: DatabaseAdapter) =
+
+  def apply(c: Connection, a: DatabaseAdapter) =
     new Session(c,a)
 }

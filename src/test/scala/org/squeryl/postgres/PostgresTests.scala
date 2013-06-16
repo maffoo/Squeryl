@@ -6,21 +6,21 @@ import org.squeryl.test._
 import org.squeryl.framework.DBConnector
 import org.squeryl.adapters.PostgreSqlAdapter
 
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 
 trait Postgresql_Connection extends DBConnector{
-  def connectToDb() : Option[() => Session] = {
+  def connectToDb() : Option[Database] = {
     if(config.hasProps("postgresql.connectionString", "postgresql.user", "postgresql.password")){
       Class.forName("org.postgresql.Driver")
 
-      Some(() => {
+      Some(Database {
         val c = java.sql.DriverManager.getConnection(
           config.getProp("postgresql.connectionString"),
           config.getProp("postgresql.user"),
           config.getProp("postgresql.password")
         )
         c.setAutoCommit(false)
-        Session.create(c, new PostgreSqlAdapter)
+        Session(c, new PostgreSqlAdapter)
       })
     }else{
       None

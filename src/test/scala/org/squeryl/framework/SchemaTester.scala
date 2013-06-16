@@ -1,11 +1,11 @@
 package org.squeryl.framework
 
-import org.scalatest.matchers.ShouldMatchers
-import org.squeryl.{Session, Schema}
-
+import org.squeryl.{Database, Session, Schema}
 import org.squeryl.PrimitiveTypeMode._
+
 import org.scalatest._
 import org.scalatest.events.{TestIgnored, Ordinal}
+import org.scalatest.matchers.ShouldMatchers
 
 abstract class SchemaTester extends DbTestBase{
 
@@ -16,7 +16,7 @@ abstract class SchemaTester extends DbTestBase{
   override def beforeAll() {
     super.beforeAll
     if (notIgnored) {
-      using(newSession()) { implicit session =>
+      database.withSession { implicit session =>
         inTransaction {
           schema.drop
           schema.create
@@ -35,7 +35,7 @@ abstract class SchemaTester extends DbTestBase{
   override def afterAll() {
     super.afterAll
     if (notIgnored) {
-      using(newSession()) { implicit session =>
+      database.withSession { implicit session =>
         transaction {
           schema.drop
         }
@@ -46,25 +46,25 @@ abstract class SchemaTester extends DbTestBase{
 
 abstract class DbTestBase extends fixture.FunSuite with ShouldMatchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
-  def connectToDb : Option[() => Session]
+  def connectToDb : Option[Database]
 
-  private var sessionFactory: Option[() => Session] = None
-  def notIgnored = sessionFactory.isDefined
-  def newSession() = sessionFactory.get()
+  private var _database: Option[Database] = None
+  def notIgnored = _database.isDefined
+  def database = _database.get
 
   val ignoredTests : List[String] = Nil
 
   type FixtureParam = Session
 
   def withFixture(test: OneArgTest) {
-    using(newSession()) { session =>
+    database.withSession { session =>
       test(session)
     }
   }
 
   override def beforeAll() {
     super.beforeAll
-    sessionFactory = connectToDb
+    _database = connectToDb
   }
 
   override def runTest(

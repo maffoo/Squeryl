@@ -5,20 +5,20 @@ import org.squeryl.test._
 import org.squeryl.framework.DBConnector
 import org.squeryl.adapters.H2Adapter
 
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 
 trait H2_Connection extends DBConnector{
-  def connectToDb() : Option[() => Session] = {
+  def connectToDb() : Option[Database] = {
     if(config.hasProps("h2.connectionString", "h2.user", "h2.password")){
       Class.forName("org.h2.Driver")
-      Some(() => {
+      Some(Database {
         val c = java.sql.DriverManager.getConnection(
           config.getProp("h2.connectionString"),
           config.getProp("h2.user"),
           config.getProp("h2.password")
         )
         c.setAutoCommit(false)
-        Session.create(c, new H2Adapter)
+        Session(c, new H2Adapter)
       })
     }else{
       None

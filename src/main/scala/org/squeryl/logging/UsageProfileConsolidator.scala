@@ -15,7 +15,7 @@
  ***************************************************************************** */
 package org.squeryl.logging
 
-import org.squeryl.Session
+import org.squeryl.{Database, Session}
 import org.squeryl.adapters.H2Adapter
 import org.squeryl.PrimitiveTypeMode._
 
@@ -37,19 +37,21 @@ object UsageProfileConsolidator {
 
       Class.forName("org.h2.Driver");
 
-      val dstDb = new Session(
+      val db = Database(new Session(
         java.sql.DriverManager.getConnection("jdbc:h2:" + dst.head.getAbsolutePath, "sa", ""),
         new H2Adapter)
+      )
 
-      using(dstDb) { implicit session =>
+      db.withSession { implicit session =>
         for(src_i <- src) {
 
-          val srcDb_i = new Session(
+          val srcDb = Database(new Session(
             java.sql.DriverManager.getConnection("jdbc:h2:" + src_i.getAbsolutePath, "sa", ""),
             new H2Adapter)
+          )
 
           val (invocations, statements) =
-            using(srcDb_i) { implicit session =>
+            srcDb.withSession { implicit session =>
               (StatsSchema.statementInvocations.allRows, StatsSchema.statements.allRows)
             }
 
